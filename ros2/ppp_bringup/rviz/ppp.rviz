@@ -1,0 +1,77 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Reference Frame: world
+    - Class: rviz_default_plugins/RobotModel
+      Name: RobotModel
+      Enabled: true
+      Description Source: Topic
+      Description Topic:
+        Value: /robot_description
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: false
+    - Class: rviz_default_plugins/Map
+      Name: PlaceZoneFreeSpace
+      Enabled: true
+      Topic:
+        Value: /perception/place_zone_grid
+        Durability Policy: Transient Local
+      Color Scheme: costmap
+      Alpha: 0.6
+    - Class: rviz_default_plugins/MarkerArray
+      Name: SceneMarkers
+      Enabled: true
+      Topic:
+        Value: /perception/scene_markers
+        Durability Policy: Transient Local
+    - Class: rviz_default_plugins/MarkerArray
+      Name: GraspCandidates
+      Enabled: true
+      Topic:
+        Value: /manipulation/grasp_markers
+    - Class: rviz_default_plugins/MarkerArray
+      Name: PlaceTarget
+      Enabled: true
+      Topic:
+        Value: /manipulation/place_markers
+    - Class: rviz_default_plugins/Pose
+      Name: EstimatedPose
+      Enabled: true
+      Topic:
+        Value: /perception/target_pose
+      Shape: Axes
+      Axes Length: 0.08
+      Axes Radius: 0.006
+    - Class: rviz_default_plugins/Image
+      Name: Detection
+      Enabled: true
+      Topic:
+        Value: /perception/detection_overlay
+    - Class: rviz_default_plugins/Image
+      Name: Pose
+      Enabled: true
+      Topic:
+        Value: /perception/pose_overlay
+  Global Options:
+    Fixed Frame: world
+    Background Color: 48; 48; 48
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 2.0
+      Focal Point: {X: 0.5, Y: 0.0, Z: 0.1}
+      Pitch: 0.6
+      Yaw: 2.6
+Window Geometry:
+  Width: 1600
+  Height: 900

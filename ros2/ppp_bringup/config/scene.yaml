@@ -1,0 +1,78 @@
+# Single source of truth for the simulated cell. Read by isaac_sim/*.py, every ROS 2 node and the
+# evaluation tools. Units: metres, radians, kg. World frame == Franka base (panda_link0).
+world_frame: world
+
+table:
+  center: [0.55, 0.0, -0.025]   # top surface at z = 0
+  size: [0.80, 1.20, 0.05]
+
+zones:
+  pick:  {x: [0.35, 0.60], y: [0.05, 0.33]}     # objects are spawned here (<= 0.69 m from the base)
+  place: {x: [0.35, 0.60], y: [-0.33, -0.05]}   # target region for placement (with clutter)
+
+camera:
+  # Simulated RealSense D435 colour stream (640x480) with aligned depth.
+  frame_id: camera_color_optical_frame
+  width: 640
+  height: 480
+  fx: 615.0
+  fy: 615.0
+  cx: 320.0
+  cy: 240.0
+  eye: [1.15, 0.0, 0.80]
+  target: [0.52, 0.0, 0.0]
+  rate_hz: 10.0
+  depth_min: 0.1
+  depth_max: 3.0
+  depth_noise_std: 0.001        # metres, gaussian, applied in sim
+
+robot:
+  base_frame: panda_link0
+  arm_joints: [panda_joint1, panda_joint2, panda_joint3, panda_joint4, panda_joint5, panda_joint6, panda_joint7]
+  finger_joints: [panda_finger_joint1, panda_finger_joint2]
+  home: [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
+  hand_link: panda_hand
+  tcp_offset: 0.1034            # panda_hand origin -> fingertip centre along hand z
+  max_opening: 0.08             # total finger opening (m)
+  finger_depth: 0.03            # how far the fingertips go past the grasped face
+  approach_distance: 0.10
+  lift_height: 0.15
+  retreat_height: 0.12
+
+grasp:
+  max_approach_tilt_deg: 50     # approach direction vs. world -z
+  width_margin: 0.008           # required free opening beyond the object width
+  table_clearance: 0.012        # fingertips must stay this far above the table
+  ik_timeout: 0.05
+
+place:
+  grid_resolution: 0.01
+  height_threshold: 0.012       # points higher than this above the plane are obstacles
+  footprint_margin: 0.02
+  drop_height: 0.008            # release this far above the table
+  yaw_candidates_deg: [0, 90, -90, 180, 45, -45]
+
+objects:
+  # Chosen from the YCB set: good scans, a top-down grasp fits the 8 cm Panda gripper in the resting
+  # pose. (008_pudding_box / 009_gelatin_box were dropped: lying flat they are 9 / 7.3 cm wide.)
+  # symmetry: none | cylinder_z (only the z axis is observable) | box180 (untextured cuboid)
+  - {name: 004_sugar_box,       mass: 0.514, symmetry: none}
+  - {name: 005_tomato_soup_can, mass: 0.349, symmetry: cylinder_z}
+  - {name: 006_mustard_bottle,  mass: 0.603, symmetry: none}
+  - {name: 010_potted_meat_can, mass: 0.370, symmetry: none}
+  - {name: 061_foam_brick,      mass: 0.028, symmetry: box180}
+  - {name: 077_rubiks_cube,     mass: 0.252, symmetry: none}
+
+spawn:
+  num_objects: [3, 4]           # objects in the pick zone per episode (inclusive)
+  min_distance: 0.12            # between object centres
+  num_clutter: [1, 3]           # boxes dropped into the place zone
+  clutter_size_min: [0.04, 0.04, 0.03]
+  clutter_size_max: [0.08, 0.08, 0.07]
+  clutter_min_distance: 0.10
+  drop_height: 0.01
+  settle_time: 1.5              # seconds of physics before reporting ready
+
+physics:
+  dt: 0.0166667                 # 60 Hz
+  friction: 1.2

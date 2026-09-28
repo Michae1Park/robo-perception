@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>ppp_manipulation</name>
+  <version>0.1.0</version>
+  <description>Grasp and placement planning, MoveIt 2 task execution and a sim trajectory executor.</description>
+  <maintainer email="parkmjb@gmail.com">Michael Park</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>ppp_common</exec_depend>
+  <exec_depend>ppp_perception</exec_depend>
+  <exec_depend>ppp_interfaces</exec_depend>
+  <exec_depend>control_msgs</exec_depend>
+  <exec_depend>moveit_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>trajectory_msgs</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
+  <exec_depend>shape_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>message_filters</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -1,0 +1,20 @@
+{
+  "source": "BOP benchmark, YCB-Video test set (ycbv_test_bop19), scene 000050, image_id 1026",
+  "source_url": "https://huggingface.co/datasets/bop-benchmark/ycbv/resolve/main/ycbv_test_bop19.zip",
+  "license": "YCB-Video dataset (Calli et al. / PoseCNN authors), redistributed via the BOP benchmark",
+  "no_robot_arm": true,
+  "objects_present": [
+    "003_cracker_box",
+    "005_tomato_soup_can",
+    "006_mustard_bottle",
+    "011_banana",
+    "035_power_drill"
+  ],
+  "objects_matching_repo_assets_ycb": [
+    "005_tomato_soup_can",
+    "006_mustard_bottle"
+  ],
+  "camera_K_note": "camera_K.txt is the 3x3 intrinsics matrix for this frame",
+  "depth_scale_mm_per_unit": 0.1,
+  "depth_note": "scene_depth.png is uint16, BOP convention: real_depth_mm = pixel_value * depth_scale_mm_per_unit"
+}

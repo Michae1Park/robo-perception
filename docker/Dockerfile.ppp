@@ -1,0 +1,18 @@
+# Image layer on top of the Isaac ROS 3.x (ROS 2 Humble) dev image.
+# Used by isaac_ros_common/scripts/run_dev.sh via CONFIG_IMAGE_KEY="ros2_humble.ppp" (see docs/SETUP.md).
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ros-humble-isaac-ros-foundationpose \
+        ros-humble-moveit \
+        ros-humble-moveit-configs-utils \
+        ros-humble-moveit-resources-panda-moveit-config \
+        ros-humble-moveit-simple-controller-manager \
+        ros-humble-vision-msgs \
+        ros-humble-message-filters \
+        ros-humble-tf2-ros \
+        ros-humble-rviz2 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m pip install --no-cache-dir "ultralytics>=8.3.150" pyyaml

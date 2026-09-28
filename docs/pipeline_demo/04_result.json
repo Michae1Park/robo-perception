@@ -1,0 +1,47 @@
+{
+  "num_candidates": 8,
+  "num_feasible": 2,
+  "max_approach_tilt_deg": 50,
+  "all_candidates_by_tilt": [
+    {
+      "face": "+z/+y",
+      "tilt_deg": 8.460218239915378,
+      "width": 0.066619
+    },
+    {
+      "face": "+z/-y",
+      "tilt_deg": 8.460218239915378,
+      "width": 0.066619
+    },
+    {
+      "face": "-x/+y",
+      "tilt_deg": 89.97950318921629,
+      "width": 0.066619
+    },
+    {
+      "face": "-x/-y",
+      "tilt_deg": 89.97950318921629,
+      "width": 0.066619
+    },
+    {
+      "face": "+x/+y",
+      "tilt_deg": 90.02049681078371,
+      "width": 0.066619
+    },
+    {
+      "face": "+x/-y",
+      "tilt_deg": 90.02049681078371,
+      "width": 0.066619
+    },
+    {
+      "face": "-z/+y",
+      "tilt_deg": 171.53978176008462,
+      "width": 0.066619
+    },
+    {
+      "face": "-z/-y",
+      "tilt_deg": 171.53978176008462,
+      "width": 0.066619
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+string target
+geometry_msgs/PoseStamped object_pose   # current object pose (world)
+geometry_msgs/Pose object_to_hand       # grasp, in object frame
+float64 table_height
+nav_msgs/OccupancyGrid place_zone
+---
+bool success
+string message
+geometry_msgs/PoseStamped object_place  # planned object pose after release
+geometry_msgs/PoseStamped place         # panda_hand pose at release
+geometry_msgs/PoseStamped preplace      # panda_hand pose above release
+sensor_msgs/JointState preplace_joints
+float32 latency_ms

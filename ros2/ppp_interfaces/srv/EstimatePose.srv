@@ -1,0 +1,12 @@
+# 6-DoF pose of the target from RGB-D + mask (FoundationPose).
+string target
+sensor_msgs/Image rgb
+sensor_msgs/Image depth       # 32FC1, metres
+sensor_msgs/CameraInfo camera_info
+sensor_msgs/Image mask        # mono8
+---
+bool success
+string message
+geometry_msgs/PoseStamped pose          # object (mesh) frame in world frame
+geometry_msgs/PoseStamped pose_camera   # object frame in camera optical frame
+float32 latency_ms
