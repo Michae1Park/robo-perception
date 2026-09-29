@@ -32,6 +32,7 @@ pipeline/run_all.sh                 # stages 1-4 on the mustard0 sequence -> out
 | [`pipeline/render_mesh.py`](pipeline/render_mesh.py) | Mesh as FoundationPose sees it: texture / shape / vertices / triangles side by side, or at a pose over the scene (`--pose TAG`) | host (re-runs itself in the container) |
 | [`pipeline/interactive_spatial.py`](pipeline/interactive_spatial.py) | **Stage 3 playground**: depth → table plane (RANSAC) → occupancy grid, 4 panels + the stage 2 bottle on the table. Guide: [docs/STAGE3_SPATIAL.md](docs/STAGE3_SPATIAL.md) | host |
 | [`pipeline/interactive_grasp.py`](pipeline/interactive_grasp.py) | **Stage 4 playground**: box-face grasp candidates on the stage 2 pose → tilt / table / collision filter from stage 3's RANSAC geometry. Guide: [docs/STAGE4_GRASP.md](docs/STAGE4_GRASP.md) | host |
+| [`pipeline/interactive_place.py`](pipeline/interactive_place.py) | **Stage 5 playground**: wrist-camera view of the sim shelf → horizontal supports → free space → where the object fits. Guide: [docs/STAGE5_PLACE.md](docs/STAGE5_PLACE.md) | host |
 | [`pipeline/talk_and_pick.py`](pipeline/talk_and_pick.py) | Text command → stages 1-4 → 4-panel composite | host (calls the container for stages 1-2) |
 | [`sim/scene.py`](sim/scene.py) | **Isaac Sim cell** (table with 6 YCB items, Franka, shelf, RGB-D camera) → frames + ground-truth masks/poses for the demo picks (mustard, tomato can) in `data/sim/` for stage 2 (`interactive_pose.py --data data/sim/005_tomato_soup_can`). Guide: [docs/SIM.md](docs/SIM.md) | `.venv-sim` |
 | `pytest tests` | Unit tests for `vision/` (no GPU) | host |
@@ -66,7 +67,7 @@ $PY pipeline/interactive_detect.py --prompt my_obj ref.png 120,80,340,410 --scen
 | `tests/` | Unit tests |
 | `docs/pipeline_demo/` | Committed result screenshots (shown in this README) |
 | `models/` | Model weights: `yoloe-11{s,m,l}-seg.pt`, prompt-free `yoloe-11{s,m,l}-seg-pf.pt`, `mobileclip_blt.ts` (gitignored) |
-| `output/` | Results of your runs (gitignored); YOLOE playground -> `output/yoloe/`, pose playground -> `output/pose/`, mesh renders -> `output/mesh/`, spatial playground -> `output/spatial/`, grasp playground -> `output/grasp/` |
+| `output/` | Results of your runs (gitignored); YOLOE playground -> `output/yoloe/`, pose playground -> `output/pose/`, mesh renders -> `output/mesh/`, spatial playground -> `output/spatial/`, grasp playground -> `output/grasp/`, place playground -> `output/place/` |
 
 ## Data
 

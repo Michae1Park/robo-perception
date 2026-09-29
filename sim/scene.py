@@ -8,7 +8,7 @@ the FoundationPose demo_data layout (same as mustard0), plus ground-truth poses 
 
 Output (<out>/, default data/sim/):
   scene/     rgb/000000.png  depth/000000.png (uint16 mm)  cam_K.txt  T_base_cam.txt (GT extrinsics)
-  shelf/     same, from the 2nd camera looking into the shelf (stage 5), + shelf.json (GT board heights)
+  shelf/     same, from the wrist camera with the arm in its shelf-looking pose (stage 5), + shelf.json (GT board heights)
   <target>/  masks/000000.png (visible pixels = 255)  ob_in_cam/000000.txt (GT 4x4 pose, OpenCV camera frame)
              mesh -> assets/ycb/<target>/ (the OBJ FoundationPose uses); rgb, depth, cam_K.txt -> ../scene/
 
@@ -50,7 +50,7 @@ from isaacsim.core.prims import SingleArticulation, SingleRigidPrim  # noqa: E40
 from isaacsim.core.utils.stage import add_reference_to_stage, get_current_stage  # noqa: E402
 from isaacsim.core.utils.types import ArticulationAction  # noqa: E402
 from isaacsim.storage.native import get_assets_root_path  # noqa: E402
-from pxr import Gf, Semantics, UsdGeom, UsdLux, UsdPhysics  # noqa: E402
+from pxr import Gf, Semantics, Usd, UsdGeom, UsdLux, UsdPhysics  # noqa: E402
 
 sys.path.insert(0, REPO)
 sys.path.insert(0, os.path.join(REPO, 'sim'))
@@ -244,6 +244,33 @@ def drop_all(objects, rng):
     return yaws
 
 
+def add_wrist_camera(cam_cfg, mount_xyz):
+    """Camera on the Franka hand (moves with the arm), looking along the hand's +z. -> prim path."""
+    w, h, f = cam_cfg['width'], cam_cfg['height'], cam_cfg['fx']
+    path = '/World/Franka/panda_hand/WristCamera'
+    cam = UsdGeom.Camera.Define(get_current_stage(), path)
+    ha = 20.955
+    cam.CreateHorizontalApertureAttr(ha)
+    cam.CreateVerticalApertureAttr(ha * h / w)
+    cam.CreateFocalLengthAttr(f * ha / w)
+    cam.CreateClippingRangeAttr(Gf.Vec2f(0.05, 10.0))
+    T_hand_usd = tf.make_T(t=mount_xyz) @ USD_FROM_CV     # OpenCV camera axes = hand axes
+    UsdGeom.Xformable(cam).AddTransformOp().Set(Gf.Matrix4d(*T_hand_usd.T.flatten()))
+    return path
+
+
+def world_pose_cv(path):
+    """Current world pose of a USD camera prim, as an OpenCV camera (4x4)."""
+    m = UsdGeom.Xformable(get_current_stage().GetPrimAtPath(path)).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+    return np.array(m).T @ USD_FROM_CV
+
+
+def move_arm(franka, q7):
+    q = np.concatenate([q7, FRANKA_READY[7:]])
+    franka.set_joint_positions(q)
+    franka.apply_action(ArticulationAction(joint_positions=q))
+
+
 def place_on_shelf(shelf_objects, shelf_cfg):
     """Stand each shelf item upright on its board, at x along the shelf width, centred front-to-back."""
     (cx, cy) = shelf_cfg['center_xy']
@@ -255,14 +282,13 @@ def place_on_shelf(shelf_objects, shelf_cfg):
         prim.set_angular_velocity(np.zeros(3))
 
 
-def prepare_shelf_output(root, K, T_world_cam, shelf_cfg):
-    """Fresh <root>/shelf/: the shelf camera's images + GT extrinsics + GT shelf geometry (to score stage 5)."""
+def prepare_shelf_output(root, K, shelf_cfg):
+    """Fresh <root>/shelf/: the wrist camera's images + GT shelf geometry (to score stage 5). Extrinsics per frame."""
     d = os.path.join(root, 'shelf')
     shutil.rmtree(d, ignore_errors=True)
     for sub in ('rgb', 'depth'):
         os.makedirs(os.path.join(d, sub))
     np.savetxt(os.path.join(d, 'cam_K.txt'), K)
-    np.savetxt(os.path.join(d, 'T_base_cam.txt'), T_world_cam)
     with open(os.path.join(d, 'shelf.json'), 'w') as f:
         json.dump({k: shelf_cfg[k] for k in ('center_xy', 'size', 'levels_z', 'board')}, f, indent=2)
     return d
@@ -315,9 +341,10 @@ def main():
         annot['seg'] = rep.AnnotatorRegistry.get_annotator('semantic_segmentation', init_params={'colorize': False})
         for a in annot.values():
             a.attach(rp)
-        # 2nd camera: into the shelf (stage 5). Same intrinsics, its own pose; no rig drawn
-        shelf_path, _, T_world_shelf = add_camera({**cam_cfg, **cfg['shelf_camera']}, '/World/ShelfCamera')
-        shelf_dir = prepare_shelf_output(root, K, T_world_shelf, cfg['shelf'])
+        # 2nd camera: on the robot's wrist (stage 5). Same intrinsics; its pose follows the arm
+        wcfg = cfg['wrist_camera']
+        shelf_path = add_wrist_camera(cam_cfg, wcfg['mount_xyz'])
+        shelf_dir = prepare_shelf_output(root, K, cfg['shelf'])
         rp2 = rep.create.render_product(shelf_path, (cam_cfg['width'], cam_cfg['height']))
         annot2 = {k: rep.AnnotatorRegistry.get_annotator(k) for k in ('rgb', 'distance_to_image_plane')}
         for a in annot2.values():
@@ -339,6 +366,7 @@ def main():
     prims = {o['name']: prim for o, prim, _ in objects}
     T_cam_world = tf.invert(T_world_cam)
     for i in range(args.frames):
+        move_arm(franka, FRANKA_READY[:7])                 # table shot: arm at home
         yaws = drop_all(objects, rng)
         place_on_shelf(shelf_objects, cfg['shelf'])
         settle(world, cfg['settle_steps'])
@@ -349,11 +377,6 @@ def main():
         depth[~np.isfinite(depth)] = 0
         cv2.imwrite(os.path.join(scene, 'rgb', fid + '.png'), rgb[..., ::-1])
         cv2.imwrite(os.path.join(scene, 'depth', fid + '.png'), np.round(depth * 1000).astype(np.uint16))
-        rgb2 = np.asarray(annot2['rgb'].get_data())[..., :3]
-        depth2 = np.asarray(annot2['distance_to_image_plane'].get_data(), dtype=np.float32)
-        depth2[~np.isfinite(depth2)] = 0
-        cv2.imwrite(os.path.join(shelf_dir, 'rgb', fid + '.png'), rgb2[..., ::-1])
-        cv2.imwrite(os.path.join(shelf_dir, 'depth', fid + '.png'), np.round(depth2 * 1000).astype(np.uint16))
 
         seg = annot['seg'].get_data()
         labels = seg['info']['idToLabels']
@@ -366,6 +389,19 @@ def main():
             np.savetxt(os.path.join(root, n, 'ob_in_cam', fid + '.txt'), ob_in_cam)
             print('[sim] frame %s %-20s yaw %6.1f deg, %.3f m from camera, mask %5d px'
                   % (fid, n, yaws[n], np.linalg.norm(ob_in_cam[:3, 3]), mask.sum()))
+
+        move_arm(franka, np.array(wcfg['look_joints']))    # shelf shot: arm in its looking pose
+        settle(world, cfg['settle_steps'])
+        T_base_wrist = world_pose_cv(shelf_path)            # base = world origin
+        np.savetxt(os.path.join(shelf_dir, 'T_base_cam.txt'), T_base_wrist)
+        print('[sim] frame %s wrist camera at %s, looking %s' % (fid, np.round(T_base_wrist[:3, 3], 3),
+                                                                 np.round(T_base_wrist[:3, 2], 2)))
+        rgb2 = np.asarray(annot2['rgb'].get_data())[..., :3]
+        depth2 = np.asarray(annot2['distance_to_image_plane'].get_data(), dtype=np.float32)
+        depth2[~np.isfinite(depth2)] = 0
+        cv2.imwrite(os.path.join(shelf_dir, 'rgb', fid + '.png'), rgb2[..., ::-1])
+        cv2.imwrite(os.path.join(shelf_dir, 'depth', fid + '.png'), np.round(depth2 * 1000).astype(np.uint16))
+
     print('[sim] wrote %s: scene/ + shelf/ + %s' % (root, ', '.join(targets)))
     app.close()
 

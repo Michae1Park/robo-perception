@@ -30,6 +30,22 @@ grasp:                        # stage 4 filter
   width_margin: 0.008         # free opening required beyond the object width
   table_clearance: 0.012      # fingertips must stay this far above the table
 
+place:                        # stage 5 (shelf placement): supports -> free space -> candidates
+  max_tilt_deg: 10            # a surface counts as horizontal if its normal is within this of "up"
+  ransac_dist: 0.008          # point-to-plane distance counted as "on the surface"
+  ransac_iters: 200
+  min_inliers: 800            # smaller planes are ignored
+  max_planes: 6               # stop after this many horizontal planes
+  min_area: 0.01              # m^2: smaller pieces of a plane are ignored
+  resolution: 0.01            # grid cell size
+  height_thresh: 0.012        # higher than this above a support = obstacle
+  max_height: 0.6             # ignore points higher than this above a support
+  min_gap: 0.05               # a support this much higher counts as the "ceiling" of the one below
+  margin: 0.01                # extra free space around the object's footprint
+  hand_clearance: 0.08        # space needed above the object for the gripper when setting it down
+  max_reach: 0.85             # Franka: max distance from the shoulder (0, 0, 0.333) to the place point
+  per_support: 3              # best candidates kept per support
+
 sim:                          # Isaac Sim scene (sim/scene.py). World frame: z up, z = 0 is the table top, Franka base at origin
   table_center: [0.55, 0.0]   # xy of the table centre; its top is at z = 0
   table_size: [0.70, 0.80, 0.75]
@@ -50,9 +66,9 @@ sim:                          # Isaac Sim scene (sim/scene.py). World frame: z u
     - {name: 004_sugar_box,       level: 0, x: -0.14, yaw_deg: 10}   # x along the shelf width, from its centre
     - {name: 010_potted_meat_can, level: 0, x:  0.16, yaw_deg: -20}
     - {name: 005_tomato_soup_can, level: 1, x:  0.02, yaw_deg: 0}
-  shelf_camera:               # 2nd camera (no rig drawn), looking into the shelf from the robot's left, clear of the arm
-    eye: [-0.40, 0.25, 0.85]
-    target: [0.0, -0.58, 0.30]
+  wrist_camera:               # eye-in-hand camera on the Franka hand (stage 5): the arm moves to look_joints for the shelf shot
+    mount_xyz: [0.05, 0.0, 0.0]   # camera centre in the panda_hand frame; it looks along the hand's +z (the fingers' direction)
+    look_joints: [-2.26, -0.884, 0.014, -1.301, 0.484, 1.027, 2.063]   # IK: camera at (0, -0.05, 0.95) looking at the shelf centre
   colors:                     # sRGB 0-1 (as in a colour picker; converted to linear for USD)
     floor: [0.10, 0.12, 0.16]
     backdrop: [0.55, 0.65, 0.80]   # dome light colour = what you see behind the scene
