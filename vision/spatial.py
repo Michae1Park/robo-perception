@@ -147,7 +147,7 @@ def analyze_scene(depth_m, K, cfg):
     """Depth -> table plane + occupancy grid, in a plane-aligned "pseudo-world" frame.
 
     No robot calibration exists for the demo images, so the dominant plane defines the frame:
-    table normal = +Z, table height = 0, X/Y arbitrary in-plane axes.
+    table normal = +Z, table height = 0, X = image right projected onto the table, Y = away from the camera.
     `cfg` is the `spatial` section of config.yaml. Returns a dict (raises RuntimeError if no plane):
       T_world_cam, plane_cam, inliers, n_points, zone, grid, clearance
     """
@@ -161,8 +161,7 @@ def analyze_scene(depth_m, K, cfg):
         plane_cam = -plane_cam
     n = plane_cam[:3]
     p0 = -plane_cam[3] * n  # a point on the plane
-    tmp = np.array([1.0, 0.0, 0.0]) if abs(n[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
-    u = np.cross(n, tmp)
+    u = np.array([1.0, 0.0, 0.0]) - n[0] * n  # X = camera's x (image right) projected onto the table
     u /= np.linalg.norm(u)
     R = np.stack([u, np.cross(n, u), n], axis=0)  # world_from_cam rotation
     T_world_cam = np.eye(4)

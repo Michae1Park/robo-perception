@@ -30,6 +30,7 @@ pipeline/run_all.sh                 # stages 1-4 on the mustard0 sequence -> out
 | [`pipeline/interactive_detect.py`](pipeline/interactive_detect.py) | Same playground as a CLI (`--text` / `--ref` / `--prompt` / `--prompt-free`) | host |
 | [`pipeline/interactive_pose.py`](pipeline/interactive_pose.py) | **Stage 2 playground**: mustard bottle on the stage 1 image → YOLOE mask → pose, top hypotheses, timing (`--iterations`, `--n-views`). Guide: [docs/STAGE2_POSE.md](docs/STAGE2_POSE.md) | host (re-runs itself in the container) |
 | [`pipeline/render_mesh.py`](pipeline/render_mesh.py) | Mesh as FoundationPose sees it: texture / shape / vertices / triangles side by side, or at a pose over the scene (`--pose TAG`) | host (re-runs itself in the container) |
+| [`pipeline/interactive_spatial.py`](pipeline/interactive_spatial.py) | **Stage 3 playground**: depth → table plane (RANSAC) → occupancy grid, 4 panels + the stage 2 bottle on the table. Guide: [docs/STAGE3_SPATIAL.md](docs/STAGE3_SPATIAL.md) | host |
 | [`pipeline/talk_and_pick.py`](pipeline/talk_and_pick.py) | Text command → stages 1-4 → 4-panel composite | host (calls the container for stages 1-2) |
 | `pytest tests` | Unit tests for `vision/` (no GPU) | host |
 
@@ -62,7 +63,7 @@ $PY pipeline/interactive_detect.py --prompt my_obj ref.png 120,80,340,410 --scen
 | `tests/` | Unit tests |
 | `docs/pipeline_demo/` | Committed result screenshots (shown in this README) |
 | `models/` | Model weights: `yoloe-11{s,m,l}-seg.pt`, prompt-free `yoloe-11{s,m,l}-seg-pf.pt`, `mobileclip_blt.ts` (gitignored) |
-| `output/` | Results of your runs (gitignored); YOLOE playground -> `output/yoloe/`, pose playground -> `output/pose/`, mesh renders -> `output/mesh/` |
+| `output/` | Results of your runs (gitignored); YOLOE playground -> `output/yoloe/`, pose playground -> `output/pose/`, mesh renders -> `output/mesh/`, spatial playground -> `output/spatial/` |
 
 ## Data
 
@@ -80,7 +81,7 @@ $PY pipeline/interactive_detect.py --prompt my_obj ref.png 120,80,340,410 --scen
 |---|---|---|
 | 1 | mustard0 frame 736, prompt from frame 0 | `006_mustard_bottle` score **0.51** ([image](docs/pipeline_demo/01_detection.png)) |
 | 2 | stage 1 mask | 6-DoF pose overlay ([image](docs/pipeline_demo/02_pose_overlay.png)) |
-| 3 | depth | plane 88k / 132k inliers; grid 140×50 cells, 4632 free / 322 occupied / 2046 unknown ([image](docs/pipeline_demo/03_occupancy.png)) |
+| 3 | depth | plane 88k / 132k inliers; grid 140×50 cells, 4634 free / 321 occupied / 2045 unknown ([image](docs/pipeline_demo/03_occupancy.png)) |
 | 4 | pose + mesh | **2 / 8** candidates feasible; best is 8.5° from vertical ([image](docs/pipeline_demo/04_grasp_candidates.png)) |
 | 1 (multi-object) | tomato soup can / mustard bottle prompts | 0.71 / 0.55, no false positives on cracker box, banana, drill ([image](docs/pipeline_demo/multi_object/overview.png)) |
 
