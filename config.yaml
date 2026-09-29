@@ -65,10 +65,12 @@ sim:                          # Isaac Sim scene (sim/scene.py). World frame: z u
   shelf_objects:              # items standing on the shelf boards (stage 5 must find the space around them)
     - {name: 004_sugar_box,       level: 0, x: -0.14, yaw_deg: 10}   # x along the shelf width, from its centre
     - {name: 010_potted_meat_can, level: 0, x:  0.16, yaw_deg: -20}
-    - {name: 005_tomato_soup_can, level: 1, x:  0.02, yaw_deg: 0}
-  wrist_camera:               # eye-in-hand camera on the Franka hand (stage 5): the arm moves to look_joints for the shelf shot
-    mount_xyz: [0.05, 0.0, 0.0]   # camera centre in the panda_hand frame; it looks along the hand's +z (the fingers' direction)
-    look_joints: [-2.26, -0.884, 0.014, -1.301, 0.484, 1.027, 2.063]   # IK: camera at (0, -0.05, 0.95) looking at the shelf centre
+    - {name: 061_foam_brick,      level: 1, x:  0.02, yaw_deg: 0}    # not a pick target: no duplicate of a demo object (I-014)
+  wrist_camera:               # D455 on the Franka hand (stage 5): the arm moves to look_joints for the shelf shot
+    mount_xyz: [0.0495, -0.0115, 0.066]   # colour lens in the panda_hand frame: body flat on the hand's +x side, glass flush
+                                          # with the hand's front, long axis along the fingers' opening (y); looks along +z
+    mount_yaw_deg: 90                     # camera x = -hand y, camera y = hand x
+    look_joints: [-1.515, -0.826, -0.008, -1.066, -0.045, 0.909, 0.793]   # IK: camera at (0, -0.05, 0.95) looking at the shelf centre
   colors:                     # sRGB 0-1 (as in a colour picker; converted to linear for USD)
     floor: [0.10, 0.12, 0.16]
     backdrop: [0.55, 0.65, 0.80]   # dome light colour = what you see behind the scene

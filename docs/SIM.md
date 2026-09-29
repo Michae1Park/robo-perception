@@ -14,8 +14,8 @@ so stage 2 can be scored (rotation / translation error). No ROS yet; the ROS 2 b
 | Lying can | Rocks ~7 mm onto a flat of its collision hull in the first 2 s, then stays put (checked over 20 s, at every yaw) |
 | Shelf | Open shelf 90° to the robot's right (−y), opening facing the robot. Levels at z = 0 / 0.32 / 0.64 m; every level is 0.6–0.8 m from the shoulder (Franka reach ≈ 0.85 m), so it is the place target for pick-and-place |
 | Robot | Franka Panda (NVIDIA asset), base at the world origin on a pedestal, held in its home pose. Idle for now |
-| Shelf items | Sugar box + potted meat can on the bottom level, soup can on the middle one (`shelf_objects`): stage 5 must find the space around them |
-| Wrist camera | Same intrinsics, on the Franka hand (5 cm to the side, looking along the fingers). Each frame: table shot at home, then the arm moves to `wrist_camera.look_joints` (IK: camera at (0, −0.05, 0.95) looking into the shelf) and the wrist camera takes the shelf shot → `data/sim/shelf/` |
+| Shelf items | Sugar box + potted meat can on the bottom level, foam brick on the middle one (`shelf_objects`): stage 5 must find the space around them. Deliberately not a pick target, so a prompt never matches a shelf item ([I-014](DECISIONS.md#i-014)) |
+| Wrist camera | Same intrinsics; the NVIDIA **RealSense D455** model mounted flat on the hand's side (colour lens at hand (49.5, −11.5, 66) mm, glass flush with the hand's front, long axis along the fingers' opening), looking along the fingers. Visual only: no rigid body, no colliders. Each frame: table shot at home, then the arm moves to `wrist_camera.look_joints` (IK: camera at (0, −0.05, 0.95) looking into the shelf) and the wrist camera takes the shelf shot → `data/sim/shelf/` |
 | Camera | Pinhole 640×480, fx = fy = 615, front-left of the table (robot's view), 0.5 m above it and ~0.73 m from the bottle, looking 36° down at the table centre. Rendered as a **RealSense D455** (NVIDIA asset) on a ball head + floor tripod; the colour lens sits exactly on the optical centre. The rig is visual only and never appears in the camera's own images |
 | Look | Dark slate floor, blue-grey backdrop, light-grey table, blue shelf. Colours are sRGB in `sim.colors` |
 
@@ -47,6 +47,7 @@ The Franka asset is downloaded from NVIDIA's asset server (needs internet).
 .venv-sim/bin/python sim/scene.py                 # 1 frame  -> data/sim/
 .venv-sim/bin/python sim/scene.py --frames 10     # 10 frames, new random target yaws each
 .venv-sim/bin/python sim/scene.py --livestream    # view only: stream the scene to the laptop (below)
+.venv-sim/bin/python sim/scene.py --livestream --arm look   # same, arm in its shelf-looking pose (see the wrist camera)
 .venv-sim/bin/python sim/scene.py --help
 ```
 
@@ -120,7 +121,7 @@ All in `config.yaml` → `sim:`.
 | `objects` | List of `{name, xy, yaw_deg, tilt_deg, target}`: any YCB item prepared by `scripts/prepare_ycb.py`. `yaw_deg` fixed or `[lo, hi]` (random per frame); `tilt_deg: 90` = lying on its side; `target: true` = save its mask + ground-truth pose |
 | `shelf.center_xy / size / levels_z / board` | Shelf footprint, board heights, thickness |
 | `shelf_objects` | Items standing on the shelf: `{name, level, x, yaw_deg}` |
-| `wrist_camera.mount_xyz / look_joints` | Wrist camera offset on the hand; arm pose for the shelf shot |
+| `wrist_camera.mount_xyz / mount_yaw_deg / look_joints` | Wrist camera lens position + roll on the hand; arm pose for the shelf shot |
 | `colors.*` | sRGB 0–1, as in a colour picker (the code converts to linear for USD) |
 | `camera.eye` / `camera.target` | Camera position and the point it looks at (world, metres). The rig follows automatically |
 | `camera.rig.*` | Tripod hub height, leg spread, leg directions (keep feet out from under the table), colours |

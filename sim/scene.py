@@ -27,6 +27,8 @@ ap.add_argument('--frames', type=int, default=1, help='frames to capture (new ra
 ap.add_argument('--seed', type=int, default=0)
 ap.add_argument('--out', default=None, help='default: data/sim')
 ap.add_argument('--livestream', action='store_true', help='view only: stream the viewport over WebRTC, no capture')
+ap.add_argument('--arm', choices=['home', 'look'], default='home',
+                help='--livestream only: arm pose to show (look = the wrist camera looking into the shelf)')
 args = ap.parse_args()
 
 from isaacsim import SimulationApp  # noqa: E402  (must be created before any other omni/isaacsim import)
@@ -244,8 +246,8 @@ def drop_all(objects, rng):
     return yaws
 
 
-def add_wrist_camera(cam_cfg, mount_xyz):
-    """Camera on the Franka hand (moves with the arm), looking along the hand's +z. -> prim path."""
+def add_wrist_camera(cam_cfg, wcfg):
+    """RealSense D455 on the Franka hand (moves with the arm), looking along the hand's +z. -> camera prim path."""
     w, h, f = cam_cfg['width'], cam_cfg['height'], cam_cfg['fx']
     path = '/World/Franka/panda_hand/WristCamera'
     cam = UsdGeom.Camera.Define(get_current_stage(), path)
@@ -254,8 +256,21 @@ def add_wrist_camera(cam_cfg, mount_xyz):
     cam.CreateVerticalApertureAttr(ha * h / w)
     cam.CreateFocalLengthAttr(f * ha / w)
     cam.CreateClippingRangeAttr(Gf.Vec2f(0.05, 10.0))
-    T_hand_usd = tf.make_T(t=mount_xyz) @ USD_FROM_CV     # OpenCV camera axes = hand axes
-    UsdGeom.Xformable(cam).AddTransformOp().Set(Gf.Matrix4d(*T_hand_usd.T.flatten()))
+    T_hand_cam = tf.make_T(tf.rot_z(np.deg2rad(wcfg['mount_yaw_deg']))[:3, :3], wcfg['mount_xyz'])
+    UsdGeom.Xformable(cam).AddTransformOp().Set(Gf.Matrix4d(*(T_hand_cam @ USD_FROM_CV).T.flatten()))
+
+    # the camera prim renders nothing: add the D455 model, placed like the tripod one (colour lens on the optical
+    # centre), visual only - no rigid body, no colliders, so it can't disturb the arm
+    stage = get_current_stage()
+    body_path = '/World/Franka/panda_hand/WristD455'
+    add_reference_to_stage(get_assets_root_path() + RS_USD, body_path)
+    UsdPhysics.RigidBodyAPI(stage.GetPrimAtPath(body_path + '/RSD455')).CreateRigidBodyEnabledAttr(False)
+    for prim in Usd.PrimRange(stage.GetPrimAtPath(body_path), Usd.TraverseInstanceProxies()):
+        if prim.HasAPI(UsdPhysics.CollisionAPI) and not prim.IsInstanceProxy():
+            UsdPhysics.CollisionAPI(prim).CreateCollisionEnabledAttr(False)
+    xf = UsdGeom.Xformable(stage.GetPrimAtPath(body_path))
+    xf.ClearXformOpOrder()
+    xf.AddTransformOp().Set(Gf.Matrix4d(*(T_hand_cam @ T_CAM_RS).T.flatten()))
     return path
 
 
@@ -333,6 +348,9 @@ def main():
     cam_path, K, T_world_cam = add_camera(cam_cfg)
     add_camera_rig(T_world_cam, -cfg['table_size'][2], cam_cfg['rig'])
 
+    wcfg = cfg['wrist_camera']
+    shelf_path = add_wrist_camera(cam_cfg, wcfg)   # on the robot's wrist (stage 5); follows the arm
+
     if not args.livestream:
         root = args.out or os.path.join(REPO, 'data', 'sim')
         scene = prepare_output(root, targets, K, T_world_cam)
@@ -341,9 +359,6 @@ def main():
         annot['seg'] = rep.AnnotatorRegistry.get_annotator('semantic_segmentation', init_params={'colorize': False})
         for a in annot.values():
             a.attach(rp)
-        # 2nd camera: on the robot's wrist (stage 5). Same intrinsics; its pose follows the arm
-        wcfg = cfg['wrist_camera']
-        shelf_path = add_wrist_camera(cam_cfg, wcfg['mount_xyz'])
         shelf_dir = prepare_shelf_output(root, K, cfg['shelf'])
         rp2 = rep.create.render_product(shelf_path, (cam_cfg['width'], cam_cfg['height']))
         annot2 = {k: rep.AnnotatorRegistry.get_annotator(k) for k in ('rgb', 'distance_to_image_plane')}
@@ -359,6 +374,8 @@ def main():
     if args.livestream:
         drop_all(objects, rng)
         place_on_shelf(shelf_objects, cfg['shelf'])
+        if args.arm == 'look':
+            move_arm(franka, np.array(wcfg['look_joints']))
         stream(world)
         app.close()
         return

@@ -74,16 +74,16 @@ depth + up ─► points + normals ─► horizontal points ─► sequential RA
 | 4. Supports | Each plane cut into connected pieces on a 1 cm grid: one shelf level, the table, the floor... | 7 supports |
 | 5. Ceiling | The lowest support above that overlaps this one = its ceiling. Headroom = ceiling − height | 320 mm per level; top board: open |
 | 6. Cells | Like stage 3: **free** (only support points), **occupied** (≥ 3 points between the support and its ceiling), **unknown** (not seen) | — |
-| 7. Candidates | Clearance = distance to the nearest non-free cell. A cell fits if clearance ≥ footprint radius and headroom ≥ object height + hand. Best first, no overlaps | 8 |
+| 7. Candidates | Clearance = distance to the nearest non-free cell. A cell fits if clearance ≥ footprint radius and headroom ≥ object height + hand. Best first, no overlaps | 9 |
 
 **Result for the mustard bottle** (radius 59 mm incl. margin, 191 mm tall → needs 271 mm headroom):
 
 | Support | Height (GT) | Headroom | Candidates | Note |
 |---|---|---|---|---|
 | S0–S2 | −0.75 (floor) | open | out of reach | seen past the shelf's sides |
-| S3 | 0.00 (0.00) | 320 mm | 2 | bottom level: only its front strip is visible; items' fronts occupied, behind them unknown |
+| S3 | 0.00 (0.00) | 320 mm | 3 | bottom level: only its front strip is visible; items' fronts occupied, behind them unknown |
 | S4 | 0.00 | open | 0 | the table corner — too little of it seen |
-| S5 | 0.32 (0.32) | 320 mm | 3 | middle level, around the soup can — most room (125 mm) → **best** |
+| S5 | 0.32 (0.32) | 320 mm | 3 | middle level, around the foam brick — most room (125 mm) → **best** |
 | S6 | 0.64 (0.64) | open | 3 | top of the shelf |
 
 All three board heights match the ground truth to the millimetre.

@@ -65,6 +65,7 @@ $PY pipeline/interactive_detect.py --prompt my_obj ref.png 120,80,340,410 --scen
 | `.vscode/settings.json` | Makes ipywidgets load in Cursor over Remote-SSH (jsDelivr CDN first) |
 | `scripts/` | `prepare_ycb.py`, `yoloe_trt.py`, `build_fp_engines.sh` (see [TensorRT](#tensorrt-not-yet-run)) |
 | `tests/` | Unit tests |
+| `docs/DECISIONS.md` | **Decision & issue log**: why things are the way they are, known issues, roadmap |
 | `docs/pipeline_demo/` | Committed result screenshots (shown in this README) |
 | `models/` | Model weights: `yoloe-11{s,m,l}-seg.pt`, prompt-free `yoloe-11{s,m,l}-seg-pf.pt`, `mobileclip_blt.ts` (gitignored) |
 | `output/` | Results of your runs (gitignored); YOLOE playground -> `output/yoloe/`, pose playground -> `output/pose/`, mesh renders -> `output/mesh/`, spatial playground -> `output/spatial/`, grasp playground -> `output/grasp/`, place playground -> `output/place/` |
