@@ -230,3 +230,6 @@ third_party/
 output/
 install/
 log/
+.venv-sim/
+data/sim/
+NvStreamer-*.etli

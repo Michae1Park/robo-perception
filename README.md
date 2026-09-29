@@ -33,6 +33,7 @@ pipeline/run_all.sh                 # stages 1-4 on the mustard0 sequence -> out
 | [`pipeline/interactive_spatial.py`](pipeline/interactive_spatial.py) | **Stage 3 playground**: depth → table plane (RANSAC) → occupancy grid, 4 panels + the stage 2 bottle on the table. Guide: [docs/STAGE3_SPATIAL.md](docs/STAGE3_SPATIAL.md) | host |
 | [`pipeline/interactive_grasp.py`](pipeline/interactive_grasp.py) | **Stage 4 playground**: box-face grasp candidates on the stage 2 pose → tilt / table / collision filter from stage 3's RANSAC geometry. Guide: [docs/STAGE4_GRASP.md](docs/STAGE4_GRASP.md) | host |
 | [`pipeline/talk_and_pick.py`](pipeline/talk_and_pick.py) | Text command → stages 1-4 → 4-panel composite | host (calls the container for stages 1-2) |
+| [`sim/scene.py`](sim/scene.py) | **Isaac Sim cell** (table with 6 YCB items, Franka, shelf, RGB-D camera) → frames + ground-truth masks/poses for the demo picks (mustard, tomato can) in `data/sim/` for stage 2 (`interactive_pose.py --data data/sim/005_tomato_soup_can`). Guide: [docs/SIM.md](docs/SIM.md) | `.venv-sim` |
 | `pytest tests` | Unit tests for `vision/` (no GPU) | host |
 
 ```bash
@@ -58,6 +59,7 @@ $PY pipeline/interactive_detect.py --prompt my_obj ref.png 120,80,340,410 --scen
 | `vision/viz.py`, `transforms.py` | Overlays / plots, 4×4 pose math |
 | `config.yaml` | **Every tunable parameter** (YOLOE conf/iou/imgsz/weights, RANSAC, grid, gripper, grasp filter) |
 | `pipeline/` | Runnable scripts (above) |
+| `sim/` | Isaac Sim 6.1 cell (`scene.py`) + OBJ → USD converter (`ycb_usd.py`). Own venv: `.venv-sim` |
 | `notebooks/` | Live playgrounds |
 | `.vscode/settings.json` | Makes ipywidgets load in Cursor over Remote-SSH (jsDelivr CDN first) |
 | `scripts/` | `prepare_ycb.py`, `yoloe_trt.py`, `build_fp_engines.sh` (see [TensorRT](#tensorrt-not-yet-run)) |

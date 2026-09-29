@@ -29,3 +29,47 @@ grasp:                        # stage 4 filter
   max_approach_tilt_deg: 50   # approach direction vs. straight down
   width_margin: 0.008         # free opening required beyond the object width
   table_clearance: 0.012      # fingertips must stay this far above the table
+
+sim:                          # Isaac Sim scene (sim/scene.py). World frame: z up, z = 0 is the table top, Franka base at origin
+  table_center: [0.55, 0.0]   # xy of the table centre; its top is at z = 0
+  table_size: [0.70, 0.80, 0.75]
+  objects:                    # YCB items on the table (assets/ycb/<name>). yaw_deg: fixed or [lo, hi] random per frame;
+                              # tilt_deg 90 = lying on its side; target: true -> mask + ground-truth pose saved (demo picks)
+    - {name: 006_mustard_bottle,  xy: [0.50,  0.00], yaw_deg: [-180, 180], target: true}
+    - {name: 005_tomato_soup_can, xy: [0.68, -0.20], yaw_deg: [-180, 180], tilt_deg: 90, target: true}
+    - {name: 004_sugar_box,       xy: [0.40, -0.24], yaw_deg: 20}
+    - {name: 010_potted_meat_can, xy: [0.33,  0.22], yaw_deg: -30}
+    - {name: 061_foam_brick,      xy: [0.72,  0.24], yaw_deg: 45}
+    - {name: 077_rubiks_cube,     xy: [0.52,  0.28], yaw_deg: 15}
+  shelf:                      # open shelf 90 deg to the robot's right (-y), opening facing the robot: place target
+    center_xy: [0.0, -0.58]   # footprint centre; every level is ~0.6 m from the base (Franka reach ~0.85 m)
+    size: [0.60, 0.30]        # width (along x), depth (along y)
+    levels_z: [0.0, 0.32, 0.64]  # board tops (world z; floor at -0.75). 0.30 m gaps fit the hand around a 19 cm bottle
+    board: 0.02               # board / panel thickness
+  shelf_objects:              # items standing on the shelf boards (stage 5 must find the space around them)
+    - {name: 004_sugar_box,       level: 0, x: -0.14, yaw_deg: 10}   # x along the shelf width, from its centre
+    - {name: 010_potted_meat_can, level: 0, x:  0.16, yaw_deg: -20}
+    - {name: 005_tomato_soup_can, level: 1, x:  0.02, yaw_deg: 0}
+  shelf_camera:               # 2nd camera (no rig drawn), looking into the shelf from the robot's left, clear of the arm
+    eye: [-0.40, 0.25, 0.85]
+    target: [0.0, -0.58, 0.30]
+  colors:                     # sRGB 0-1 (as in a colour picker; converted to linear for USD)
+    floor: [0.10, 0.12, 0.16]
+    backdrop: [0.55, 0.65, 0.80]   # dome light colour = what you see behind the scene
+    table: [0.66, 0.64, 0.60]      # light neutral grey: yellow / red / blue items all stand out
+    pedestal: [0.08, 0.08, 0.09]
+    shelf: [0.10, 0.42, 0.70]
+  camera:                     # pinhole RGB-D camera, square pixels, centred principal point (fx of a D435 colour stream)
+    width: 640
+    height: 480
+    fx: 615.0
+    eye: [1.00, 0.35, 0.50]   # camera position (world): ~0.7 m from the bottle, 36 deg down
+    target: [0.45, 0.00, 0.02] # point it looks at (middle of the table workspace)
+    rig:                      # RealSense D455 model on a floor tripod (visual only, never in the camera's own view)
+      hub_height: 0.60        # leg hub above the floor
+      leg_spread: 0.38        # foot distance from the column
+      leg_angles_deg: [30, 150, 270]   # chosen so no foot lands under the table
+      color: [0.08, 0.08, 0.09]
+      metal_color: [0.55, 0.56, 0.58]
+  settle_steps: 120           # physics steps before each capture (object drop + renderer warm-up)
+  physics_dt: 0.01666667      # 60 Hz
