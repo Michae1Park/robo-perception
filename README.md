@@ -28,6 +28,8 @@ pipeline/run_all.sh                 # stages 1-4 on the mustard0 sequence -> out
 |---|---|---|
 | [`notebooks/yoloe_playground.ipynb`](notebooks/yoloe_playground.ipynb) | **Stage 1 live playground**: text / visual / prompt-free, sliders, re-renders instantly. Open it in Cursor (or `.venv/bin/jupyter lab --no-browser`). Guide: [docs/STAGE1_DETECT.md](docs/STAGE1_DETECT.md) | host |
 | [`pipeline/interactive_detect.py`](pipeline/interactive_detect.py) | Same playground as a CLI (`--text` / `--ref` / `--prompt` / `--prompt-free`) | host |
+| [`pipeline/interactive_pose.py`](pipeline/interactive_pose.py) | **Stage 2 playground**: mustard bottle on the stage 1 image → YOLOE mask → pose, top hypotheses, timing (`--iterations`, `--n-views`). Guide: [docs/STAGE2_POSE.md](docs/STAGE2_POSE.md) | host (re-runs itself in the container) |
+| [`pipeline/render_mesh.py`](pipeline/render_mesh.py) | Mesh as FoundationPose sees it: texture / shape / vertices / triangles side by side, or at a pose over the scene (`--pose TAG`) | host (re-runs itself in the container) |
 | [`pipeline/talk_and_pick.py`](pipeline/talk_and_pick.py) | Text command → stages 1-4 → 4-panel composite | host (calls the container for stages 1-2) |
 | `pytest tests` | Unit tests for `vision/` (no GPU) | host |
 
@@ -48,7 +50,7 @@ $PY pipeline/interactive_detect.py --prompt my_obj ref.png 120,80,340,410 --scen
 |---|---|
 | `vision/` | **The algorithms** (import these when experimenting) |
 | `vision/detect.py` | Stage 1: YOLOE text / visual / prompt-free model builders, `detect()` |
-| `vision/pose.py` | Stage 2: FoundationPose wrapper (container only) |
+| `vision/pose.py` | Stage 2: FoundationPose `build_estimator()`, `register()`, `draw_pose()` (container only) |
 | `vision/spatial.py` | Stage 3: depth → points, RANSAC plane, occupancy grid, `analyze_scene()` |
 | `vision/grasp.py` | Stage 4: candidate generation + filter |
 | `vision/viz.py`, `transforms.py` | Overlays / plots, 4×4 pose math |
@@ -60,7 +62,7 @@ $PY pipeline/interactive_detect.py --prompt my_obj ref.png 120,80,340,410 --scen
 | `tests/` | Unit tests |
 | `docs/pipeline_demo/` | Committed result screenshots (shown in this README) |
 | `models/` | Model weights: `yoloe-11{s,m,l}-seg.pt`, prompt-free `yoloe-11{s,m,l}-seg-pf.pt`, `mobileclip_blt.ts` (gitignored) |
-| `output/` | Results of your runs (gitignored); YOLOE playground -> `output/yoloe/` |
+| `output/` | Results of your runs (gitignored); YOLOE playground -> `output/yoloe/`, pose playground -> `output/pose/`, mesh renders -> `output/mesh/` |
 
 ## Data
 
