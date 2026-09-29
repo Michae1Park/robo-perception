@@ -27,6 +27,8 @@ ap.add_argument('--frames', type=int, default=1, help='frames to capture (new ra
 ap.add_argument('--seed', type=int, default=0)
 ap.add_argument('--out', default=None, help='default: data/sim')
 ap.add_argument('--livestream', action='store_true', help='view only: stream the viewport over WebRTC, no capture')
+ap.add_argument('--overview', metavar='PNG', help='render one high-res still of the whole cell (config.yaml sim.overview; '
+                'arm in its shelf-looking pose) to PNG and exit')
 ap.add_argument('--arm', choices=['home', 'look'], default='home',
                 help='--livestream only: arm pose to show (look = the wrist camera looking into the shelf)')
 args = ap.parse_args()
@@ -329,6 +331,23 @@ def prepare_output(root, targets, K, T_world_cam):
     return scene
 
 
+def render_overview(world, franka, objects, shelf_objects, cfg, rng):
+    """One high-res still of the cell for the docs: items dropped, arm looking at the shelf (wrist D455 visible)."""
+    o = cfg['overview']
+    w, h = o['size']
+    fx = w / 2 / np.tan(np.radians(o['hfov_deg']) / 2)
+    path, _, _ = add_camera({'width': w, 'height': h, 'fx': fx, 'eye': o['eye'], 'target': o['target']},
+                            '/World/OverviewCamera')
+    annot = rep.AnnotatorRegistry.get_annotator('rgb')
+    annot.attach(rep.create.render_product(path, (w, h)))
+    drop_all(objects, rng)
+    place_on_shelf(shelf_objects, cfg['shelf'])
+    move_arm(franka, np.array(cfg['wrist_camera']['look_joints']))
+    settle(world, cfg['settle_steps'] + o.get('extra_steps', 0))   # extra frames let the renderer converge
+    cv2.imwrite(args.overview, np.asarray(annot.get_data())[..., 2::-1])
+    print('[sim] overview -> %s (%dx%d)' % (args.overview, w, h))
+
+
 def stream(world):
     """View-only: the viewport (not the RGB-D sensor) is what the WebRTC client shows. Replicator annotators
     never return data while streaming, so --livestream does not capture."""
@@ -351,7 +370,7 @@ def main():
     wcfg = cfg['wrist_camera']
     shelf_path = add_wrist_camera(cam_cfg, wcfg)   # on the robot's wrist (stage 5); follows the arm
 
-    if not args.livestream:
+    if not (args.livestream or args.overview):
         root = args.out or os.path.join(REPO, 'data', 'sim')
         scene = prepare_output(root, targets, K, T_world_cam)
         rp = rep.create.render_product(cam_path, (cam_cfg['width'], cam_cfg['height']))
@@ -370,6 +389,11 @@ def main():
     franka.set_joint_positions(FRANKA_READY)
     franka.apply_action(ArticulationAction(joint_positions=FRANKA_READY))   # drive targets, or it sags back to 0
     rng = np.random.default_rng(args.seed)
+
+    if args.overview:
+        render_overview(world, franka, objects, shelf_objects, cfg, rng)
+        app.close()
+        return
 
     if args.livestream:
         drop_all(objects, rng)

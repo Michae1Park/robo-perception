@@ -1,146 +1,101 @@
-# prompt-pick-place — vision pipeline
+# prompt-pick-place
 
-Show it **one example image** (or type a phrase) → it finds the object, estimates its 6-DoF pose,
-maps the table, and proposes grasps. Real RGB-D images, no robot, no simulator, no ROS.
+**Vision-driven pick-and-place from a prompt.** Show the robot one example image (or type a phrase), and it
+finds that object on the table, estimates its 6-DoF pose, plans a grasp, and finds free space on a shelf to
+put it — with no object-specific training and no prior model of the shelf.
 
-![Pipeline on one frame: detection, pose, occupancy, grasps](docs/pipeline_demo/pipeline_overview.png)
+![Isaac Sim cell: Franka Panda, table with YCB objects, shelf, fixed RealSense D455 on a tripod and a wrist-mounted D455](docs/sim/overview.png)
 
-## The pipeline
+*Simulated cell (Isaac Sim 6.1): Franka Panda, a table of YCB objects, a three-level shelf as the place target,
+a fixed RealSense D455 over the table, and a wrist-mounted D455 that looks into the shelf.*
 
-| # | Stage | Script | Runs in | Model / method |
+## Pipeline
+
+| # | Stage | Question it answers | Method | Status |
 |---|---|---|---|---|
-| 1 | Detect + mask | [`pipeline/01_detect.py`](pipeline/01_detect.py) | host | YOLOE-seg, visual prompt (example image + box) |
-| 2 | 6-DoF pose | [`pipeline/02_pose.py`](pipeline/02_pose.py) | container | FoundationPose (uses stage 1's mask) |
-| 3 | Table + free space | [`pipeline/03_spatial.py`](pipeline/03_spatial.py) | host | RANSAC plane + occupancy grid |
-| 4 | Grasp candidates | [`pipeline/04_grasp.py`](pipeline/04_grasp.py) | host | Box-face parallel-jaw grasps + geometric filter |
+| 1 | **Detect** | Where is the object I was shown? | YOLOE-seg, visual or text prompt → box + mask | ✅ Built |
+| 2 | **Pose** | What is its exact 6-DoF pose? | FoundationPose (model-based, mask-initialised) | ✅ Built |
+| 3 | **Table** | Where is the table, and what is free? | RANSAC plane + occupancy grid | ✅ Built |
+| 4 | **Grasp** | How should the gripper take it? | Parallel-jaw candidates + tilt / table / collision filter | ✅ Built |
+| 5 | **Place** | Where on the shelf does it fit? | Sequential RANSAC for horizontal supports + free-space search | ✅ Built |
+| — | **Execute** | Move the robot | ROS 2 Jazzy · MoveIt 2 · BehaviorTree.CPP · ros2_control in Isaac Sim | 🗺️ Planned |
 
-- Stages pass files through `output/` (each script reads the previous one's output) — run them in order.
-- **container** = the `foundationpose` Docker container (FoundationPose's CUDA extensions). **host** = `.venv` (torch + ultralytics for stage 1, numpy for 3-4).
+![Stages 1–5 on one scene](docs/pipeline_demo/stages.png)
 
-## Run
-
-```bash
-docker start foundationpose
-pipeline/run_all.sh                 # stages 1-4 on the mustard0 sequence -> output/
 ```
-
-| Other entry points | What it does | Runs in |
-|---|---|---|
-| [`notebooks/yoloe_playground.ipynb`](notebooks/yoloe_playground.ipynb) | **Stage 1 live playground**: text / visual / prompt-free, sliders, re-renders instantly. Open it in Cursor (or `.venv/bin/jupyter lab --no-browser`). Guide: [docs/STAGE1_DETECT.md](docs/STAGE1_DETECT.md) | host |
-| [`pipeline/interactive_detect.py`](pipeline/interactive_detect.py) | Same playground as a CLI (`--text` / `--ref` / `--prompt` / `--prompt-free`) | host |
-| [`pipeline/interactive_pose.py`](pipeline/interactive_pose.py) | **Stage 2 playground**: mustard bottle on the stage 1 image → YOLOE mask → pose, top hypotheses, timing (`--iterations`, `--n-views`). Guide: [docs/STAGE2_POSE.md](docs/STAGE2_POSE.md) | host (re-runs itself in the container) |
-| [`pipeline/render_mesh.py`](pipeline/render_mesh.py) | Mesh as FoundationPose sees it: texture / shape / vertices / triangles side by side, or at a pose over the scene (`--pose TAG`) | host (re-runs itself in the container) |
-| [`pipeline/interactive_spatial.py`](pipeline/interactive_spatial.py) | **Stage 3 playground**: depth → table plane (RANSAC) → occupancy grid, 4 panels + the stage 2 bottle on the table. Guide: [docs/STAGE3_SPATIAL.md](docs/STAGE3_SPATIAL.md) | host |
-| [`pipeline/interactive_grasp.py`](pipeline/interactive_grasp.py) | **Stage 4 playground**: box-face grasp candidates on the stage 2 pose → tilt / table / collision filter from stage 3's RANSAC geometry. Guide: [docs/STAGE4_GRASP.md](docs/STAGE4_GRASP.md) | host |
-| [`pipeline/interactive_place.py`](pipeline/interactive_place.py) | **Stage 5 playground**: wrist-camera view of the sim shelf → horizontal supports → free space → where the object fits. Guide: [docs/STAGE5_PLACE.md](docs/STAGE5_PLACE.md) | host |
-| [`pipeline/talk_and_pick.py`](pipeline/talk_and_pick.py) | Text command → stages 1-4 → 4-panel composite | host (calls the container for stages 1-2) |
-| [`sim/scene.py`](sim/scene.py) | **Isaac Sim cell** (table with 6 YCB items, Franka, shelf, RGB-D camera) → frames + ground-truth masks/poses for the demo picks (mustard, tomato can) in `data/sim/` for stage 2 (`interactive_pose.py --data data/sim/005_tomato_soup_can`). Guide: [docs/SIM.md](docs/SIM.md) | `.venv-sim` |
-| `pytest tests` | Unit tests for `vision/` (no GPU) | host |
-
-```bash
-PY=.venv/bin/python
-$PY pipeline/interactive_detect.py --text "mustard bottle" --text banana          # text prompts
-$PY pipeline/interactive_detect.py --ref 005_tomato_soup_can --ref 006_mustard_bottle   # visual prompts
-$PY pipeline/interactive_detect.py --prompt-free --conf 0.25                             # no prompt: built-in vocabulary
-$PY pipeline/interactive_detect.py --prompt my_obj ref.png 120,80,340,410 --scene scene.png --conf 0.2 --imgsz 1280
-
-.venv/bin/python pipeline/talk_and_pick.py --command "pick up mustard sauce"
-.venv/bin/python pipeline/talk_and_pick.py --repl
+fixed camera ─► 1 Detect ─► 2 Pose ──┐
+fixed camera ─► 3 Table ─────────────┴─► 4 Grasp ─► pick
+wrist camera ─► 5 Place ────────────────────────────► place     (the arm first moves to look at the shelf)
 ```
-
-## Where things are
-
-| Path | What |
-|---|---|
-| `vision/` | **The algorithms** (import these when experimenting) |
-| `vision/detect.py` | Stage 1: YOLOE text / visual / prompt-free model builders, `detect()` |
-| `vision/pose.py` | Stage 2: FoundationPose `build_estimator()`, `register()`, `draw_pose()` (container only) |
-| `vision/spatial.py` | Stage 3: depth → points, RANSAC plane, occupancy grid, `analyze_scene()` |
-| `vision/grasp.py` | Stage 4: candidate generation + filter |
-| `vision/viz.py`, `transforms.py` | Overlays / plots, 4×4 pose math |
-| `config.yaml` | **Every tunable parameter** (YOLOE conf/iou/imgsz/weights, RANSAC, grid, gripper, grasp filter) |
-| `pipeline/` | Runnable scripts (above) |
-| `sim/` | Isaac Sim 6.1 cell (`scene.py`) + OBJ → USD converter (`ycb_usd.py`). Own venv: `.venv-sim` |
-| `notebooks/` | Live playgrounds |
-| `.vscode/settings.json` | Makes ipywidgets load in Cursor over Remote-SSH (jsDelivr CDN first) |
-| `scripts/` | `prepare_ycb.py`, `yoloe_trt.py`, `build_fp_engines.sh` (see [TensorRT](#tensorrt-not-yet-run)) |
-| `tests/` | Unit tests |
-| `docs/DECISIONS.md` | **Decision & issue log**: why things are the way they are, known issues, roadmap |
-| `docs/pipeline_demo/` | Committed result screenshots (shown in this README) |
-| `models/` | Model weights: `yoloe-11{s,m,l}-seg.pt`, prompt-free `yoloe-11{s,m,l}-seg-pf.pt`, `mobileclip_blt.ts` (gitignored) |
-| `output/` | Results of your runs (gitignored); YOLOE playground -> `output/yoloe/`, pose playground -> `output/pose/`, mesh renders -> `output/mesh/`, spatial playground -> `output/spatial/`, grasp playground -> `output/grasp/`, place playground -> `output/place/` |
-
-## Data
-
-| Data | Location | Used by | How to get it |
-|---|---|---|---|
-| mustard0 RGB-D sequence + mesh | `third_party/FoundationPose/demo_data/mustard0/` | stages 1-4 (`run_all.sh`) | FoundationPose setup (below) |
-| Multi-object scene (BOP YCB-Video, 5 objects) + reference crops | `data/multi_object_scene/` | `interactive_detect`, `talk_and_pick` | tracked in git |
-| YCB meshes (6 objects) | `assets/ycb/<obj>/textured.obj` | `talk_and_pick` (pose + grasp) | `python scripts/prepare_ycb.py` |
-| YOLOE weights + text encoder | `models/` | stage 1 | auto-downloaded on first run |
-| FoundationPose weights | `third_party/FoundationPose/weights/` | stage 2 | FoundationPose setup |
 
 ## Results
 
-| Stage | Input | Result |
-|---|---|---|
-| 1 | mustard0 frame 736, prompt from frame 0 | `006_mustard_bottle` score **0.51** ([image](docs/pipeline_demo/01_detection.png)) |
-| 2 | stage 1 mask | 6-DoF pose overlay ([image](docs/pipeline_demo/02_pose_overlay.png)) |
-| 3 | depth | plane 88k / 132k inliers; grid 140×50 cells, 4634 free / 321 occupied / 2045 unknown ([image](docs/pipeline_demo/03_occupancy.png)) |
-| 4 | pose + mesh | **2 / 8** candidates feasible; best is 8.5° from vertical ([image](docs/pipeline_demo/04_grasp_candidates.png)) |
-| 1 (multi-object) | tomato soup can / mustard bottle prompts | 0.71 / 0.55, no false positives on cracker box, banana, drill ([image](docs/pipeline_demo/multi_object/overview.png)) |
-
-`talk_and_pick.py` on the multi-object scene:
-
-| Command | Result |
+| Stage | Measured |
 |---|---|
-| `pick up mustard sauce` | detected 0.68 → pose → **2/8** grasps feasible ([image](docs/pipeline_demo/multi_object/full_pipeline_mustard_sauce.png)) |
-| `grab the tomato soup can` | detected 0.40 → pose → **4/16** feasible ([image](docs/pipeline_demo/multi_object/full_pipeline_tomato_soup_can.png)) |
-| `pick up the cheez-it box` | detected 0.75 → stops (no mesh for it) ([image](docs/pipeline_demo/multi_object/full_pipeline_cheez_it_box.png)) |
+| 1 Detect | Mustard bottle found from one example image, score 0.55, no false positives among 5 objects · ~17 ms / frame (L40S) |
+| 2 Pose | Sim, vs. ground truth: **0.5–1.5°, < 1 mm** (upright bottle and a can lying on its side) · ~0.9 s / registration |
+| 3 Table | Table plane from 52 % of the points; recovered bottle height 92 mm vs. 96 mm true (pose and plane agree) |
+| 4 Grasp | 2 of 8 candidates feasible; best approaches 2° from vertical |
+| 5 Place | All three shelf levels found at their true heights (0.00 / 0.32 / 0.64 m) · 9 placements ranked by clearance · 0.15 s |
 
-## Things to know
+Stage-by-stage details, numbers and failure cases are in each guide below.
 
-- **No real world frame.** Stage 3 builds one from the table itself: table normal = +Z, table height = 0.
-- **Stage 4 mesh = stage 2 mesh.** On mustard0 it uses FoundationPose's own mesh, not `assets/ycb`, so pose and geometry agree.
-- **Stage 4 has no IK/reachability check** — no robot here; it only filters by approach tilt and table clearance.
-- **Bottle on its side → 0/8 grasps.** Correct: no top-down grasp exists. `run_all.sh` uses the final (upright) frame.
-- **Prompted YOLOE finds nothing without prompts.** `yoloe-*-seg.pt` with no classes set returns 0 detections, no error. "Detect everything" needs the separate `-seg-pf.pt` weights (`--prompt-free`).
-- **Text prompts are wording-sensitive.** `"mustard bottle"` scores 0.68, `"mustard sauce"` 0.008. `talk_and_pick` swaps in a canonical phrase for the 6 known objects.
-- **`talk_and_pick` is not an LLM.** Prefix stripping + keyword match to a mesh; the detection itself is YOLOE.
-- **Container teardown crash.** The container's Python occasionally prints `free(): double free` on exit (after the results are written). Re-run.
+## Quick start
 
-## Setup (one time)
+Tested on Ubuntu 24.04, NVIDIA L40S, driver 580.
 
-Tested: Ubuntu 24.04, NVIDIA L40S, driver ≥ 580, Docker.
-
-**Host env** (stages 1, 3-4, notebook, tests; pulls CUDA torch, ~3 GB):
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt      # vision (stages 1, 3–5)
+docker start foundationpose                                             # stage 2 (FoundationPose + CUDA extensions)
 ```
 
-**FoundationPose container** (stage 2; also stages 1-2 for `talk_and_pick.py`):
-- `git clone https://github.com/NVlabs/FoundationPose third_party/FoundationPose`
-- Follow its README for Docker. On Ada-class GPUs (L40S) use the image `shingarey/foundationpose_custom_cuda121:latest`.
-- Inside the container run its `build_all.sh`, then download its weights and `demo_data` (has `mustard0`).
-- Name the container `foundationpose`. It must mount **`/home:/home`** so the repo has the same path inside and outside.
-- `pip install ultralytics` inside the `my` env (needs `>=8.3.150`).
+Each stage has a playground: one command, a printed report, and an annotated image in `output/`.
 
-## TensorRT (not yet run)
+```bash
+source .venv/bin/activate
+python pipeline/interactive_detect.py --ref 006_mustard_bottle     # 1 detect
+python pipeline/interactive_pose.py                                 # 2 pose (runs itself in the container)
+python pipeline/interactive_spatial.py                              # 3 table + free space
+python pipeline/interactive_grasp.py                                # 4 grasp
+python pipeline/interactive_place.py                                # 5 place (needs the sim capture below)
+.venv-sim/bin/python sim/scene.py                                   # Isaac Sim: RGB-D + ground truth -> data/sim/
+```
 
-Written but never executed — this is the next piece of work.
+Full setup (FoundationPose container, Isaac Sim venv): [docs/SIM.md](docs/SIM.md) and the stage guides.
 
-| Script | Purpose |
+## Documentation
+
+| Guide | Covers |
 |---|---|
-| [`scripts/yoloe_trt.py`](scripts/yoloe_trt.py) | `export` the visual-prompt YOLOE to a TensorRT engine; `bench` PyTorch FP32 / FP16 / TensorRT latency |
-| [`scripts/build_fp_engines.sh`](scripts/build_fp_engines.sh) | Build TensorRT engines for FoundationPose's refiner + scorer from NVIDIA's ONNX models |
+| [Stage 1 — Detect](docs/STAGE1_DETECT.md) | Text / visual / prompt-free YOLOE, knobs, how the YOLOE head works |
+| [Stage 2 — Pose](docs/STAGE2_POSE.md) | FoundationPose hypotheses, refiner, scorer; mesh renderer |
+| [Stage 3 — Table](docs/STAGE3_SPATIAL.md) | RANSAC, table frame, occupancy grid |
+| [Stage 4 — Grasp](docs/STAGE4_GRASP.md) | Candidates, filter, object and gripper poses in every frame |
+| [Stage 5 — Place](docs/STAGE5_PLACE.md) | Shelf supports, headroom, placement candidates |
+| [Simulation](docs/SIM.md) | Isaac Sim cell, cameras, datasets, livestream |
+| [Decisions & issues](docs/DECISIONS.md) | Why things are the way they are, known issues, roadmap |
 
-| Backend (L40S) | inference p50 | end-to-end p50 |
-|---|---|---|
-| PyTorch FP32 | – | – |
-| PyTorch FP16 | – | – |
-| TensorRT FP16 | – | – |
+## Repository
 
-## History
+| Path | Contents |
+|---|---|
+| `vision/` | The algorithms: `detect`, `pose`, `spatial`, `grasp`, `place`, `transforms` |
+| `pipeline/` | Stage playgrounds (`interactive_*.py`) and the scripted mustard0 run |
+| `sim/` | Isaac Sim cell (`scene.py`) and YCB mesh → USD conversion |
+| `config.yaml` | Every tunable parameter, per stage and for the sim |
+| `data/` | Multi-object RGB-D scene (BOP YCB-Video) + reference crops; sim captures (generated) |
+| `docs/` | Stage guides, sim guide, decision log, figures |
+| `tests/` | Unit tests for `vision/` (`pytest tests`, no GPU) |
 
-Earlier versions had a ROS 2 + Isaac Sim + MoveIt pick-and-place stack. It was removed to focus on the
-vision pipeline; it is still in git at commit `255a4aa` (`git checkout 255a4aa -- ros2 isaac_sim docker docs/SETUP.md`).
+## Roadmap
+
+| Phase | Goal |
+|---|---|
+| 0 · Environment | ROS 2 Jazzy workspace, MoveIt 2, Isaac ROS 4.5 FoundationPose |
+| 1 · Sim ↔ ROS | Cameras, clock and ros2_control from Isaac Sim over ROS 2 |
+| 2 · Motion | MoveIt reaches both pick targets and all three shelf levels |
+| 3 · Perception nodes | One node per stage; shared C++ RANSAC for stages 3 and 5 |
+| 4 · Task | Behavior tree: pick from the table → look at the shelf → place |
+| 5 · Robustness | Hand-eye calibration, sensor noise, success rate over randomised episodes |
+
+Details and rationale: [docs/DECISIONS.md](docs/DECISIONS.md).

@@ -71,6 +71,12 @@ sim:                          # Isaac Sim scene (sim/scene.py). World frame: z u
                                           # with the hand's front, long axis along the fingers' opening (y); looks along +z
     mount_yaw_deg: 90                     # camera x = -hand y, camera y = hand x
     look_joints: [-1.515, -0.826, -0.008, -1.066, -0.045, 0.909, 0.793]   # IK: camera at (0, -0.05, 0.95) looking at the shelf centre
+  overview:                   # --overview: one still for the docs (whole cell, arm looking at the shelf)
+    size: [1600, 1200]
+    hfov_deg: 48
+    eye: [1.415, 1.725, 1.414]   # 30 deg from looking straight into the shelf (+y side), 25 deg above horizontal
+    target: [0.35, -0.12, 0.42]
+    extra_steps: 60
   colors:                     # sRGB 0-1 (as in a colour picker; converted to linear for USD)
     floor: [0.10, 0.12, 0.16]
     backdrop: [0.55, 0.65, 0.80]   # dome light colour = what you see behind the scene
