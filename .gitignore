@@ -221,14 +221,11 @@ __marimo__/
 PLAN.md
 assets/ycb/
 models/
-eval_results/
 *.engine
 *.plan
 *.onnx
 *.pt
 third_party/
-perception_demo/*/output/
-perception_demo/*/weights/
-perception_demo/*/demo_data/
+output/
 install/
 log/

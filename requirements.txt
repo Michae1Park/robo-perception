@@ -1,0 +1,7 @@
+# Host-side env (stages 3-4, talk_and_pick.py, tests). Stages 1-2 run in the foundationpose container.
+numpy
+opencv-python-headless
+matplotlib
+pyyaml
+pillow
+pytest

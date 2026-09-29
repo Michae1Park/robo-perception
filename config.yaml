@@ -1,0 +1,27 @@
+# All tunable parameters of the vision pipeline. Units: metres, degrees.
+# Read by pipeline/*.py via vision.load_config().
+
+detect:                       # stage 1 (YOLOE)
+  weights: yoloe-11l-seg.pt   # auto-downloaded by ultralytics on first run
+  conf: 0.05                  # min confidence for a raw detection
+  device: cuda:0
+
+pose:                         # stage 2 (FoundationPose)
+  iterations: 5               # refinement iterations
+
+spatial:                      # stage 3 (table plane + occupancy grid)
+  ransac_dist: 0.006          # point-to-plane distance counted as inlier
+  ransac_iters: 300
+  min_inliers: 500
+  resolution: 0.01            # occupancy cell size
+  height_thresh: 0.012        # higher than this above the plane = obstacle
+  max_height: 0.6             # ignore points above this
+
+gripper:                      # stage 4 (Franka Panda hand)
+  max_opening: 0.08           # total finger opening
+  finger_depth: 0.03          # how far fingertips go past the grasped face
+
+grasp:                        # stage 4 filter
+  max_approach_tilt_deg: 50   # approach direction vs. straight down
+  width_margin: 0.008         # free opening required beyond the object width
+  table_clearance: 0.012      # fingertips must stay this far above the table

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Download the YCB objects listed in scene.yaml (google_16k scans) and centre their meshes.
+"""Download the 6 YCB objects (google_16k scans) and centre their meshes.
 
 Output per object: assets/ycb/<name>/{textured.obj, textured.mtl, texture_map.png, info.json}
 The mesh is rotated about z so its footprint is axis-aligned (minimum-area bounding rectangle;
-some scans are yawed) and translated so its bounding-box centre is the origin. This single file is used by Isaac Sim (converted to USD), FoundationPose, grasp planning and evaluation.
+some scans are yawed) and translated so its bounding-box centre is the origin. Used by talk_and_pick.py (FoundationPose + grasp geometry).
 
   python3 scripts/prepare_ycb.py            # download + process
   python3 scripts/prepare_ycb.py --src DIR  # use already-extracted <name>/google_16k folders
@@ -20,9 +20,12 @@ import urllib.request
 import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, 'ros2', 'ppp_common'))
-from ppp_common.config import SceneConfig  # noqa: E402
-from ppp_common.mesh import read_obj_vertices  # noqa: E402
+sys.path.insert(0, ROOT)
+from vision.grasp import read_obj_vertices
+from vision.transforms import rot_z  # noqa: E402
+
+OBJECTS = ['004_sugar_box', '005_tomato_soup_can', '006_mustard_bottle', '010_potted_meat_can',
+           '061_foam_brick', '077_rubiks_cube']
 
 URL = 'http://ycb-benchmarks.s3-website-us-east-1.amazonaws.com/data/google/{name}_google_16k.tgz'
 
@@ -35,11 +38,6 @@ def download(name, dst_dir):
     with tarfile.open(path) as tar:
         tar.extractall(dst_dir)
     return os.path.join(dst_dir, name, 'google_16k')
-
-
-def rot_z(yaw):
-    c, s = np.cos(yaw), np.sin(yaw)
-    return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
 
 
 def best_yaw(v, step_deg=0.25):
@@ -99,21 +97,20 @@ def process(name, src_dir, out_dir):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--assets', default='', help='assets dir (default: <repo>/assets or $PPP_ASSETS)')
     ap.add_argument('--src', default='', help='directory with extracted <name>/google_16k folders')
     ap.add_argument('--objects', nargs='*', help='subset of object names')
     args = ap.parse_args()
-    cfg = SceneConfig(assets=args.assets)
-    names = args.objects or cfg.object_names
+    names = args.objects or OBJECTS
+    out_root = os.path.join(ROOT, 'assets', 'ycb')
     tmp = None if args.src else tempfile.mkdtemp(prefix='ycb_')
     try:
         for name in names:
             src = os.path.join(args.src, name, 'google_16k') if args.src else download(name, tmp)
-            process(name, src, os.path.join(cfg.assets, 'ycb', name))
+            process(name, src, os.path.join(out_root, name))
     finally:
         if tmp:
             shutil.rmtree(tmp, ignore_errors=True)
-    print('done ->', os.path.join(cfg.assets, 'ycb'))
+    print('done ->', out_root)
 
 
 if __name__ == '__main__':

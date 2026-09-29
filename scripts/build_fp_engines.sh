@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Build the FoundationPose refine/score TensorRT engines once (inside the Isaac ROS container).
-# All per-object FoundationPose instances share these engines.
+# [NOT YET RUN] Build FoundationPose refine/score TensorRT engines from NVIDIA's ONNX models (needs trtexec).
+# Goal: replace the PyTorch refiner/scorer in vision/pose.py with TensorRT. Pass the dir holding
+# refine_model.onnx + score_model.onnx (NGC "foundationpose" 1.0.0_onnx) as $1.
 set -euo pipefail
-MODELS=${1:-${ISAAC_ROS_WS:-/workspaces/isaac_ros-dev}/isaac_ros_assets/models/foundationpose}
+MODELS=${1:?usage: build_fp_engines.sh <dir with refine_model.onnx and score_model.onnx>}
 TRTEXEC=${TRTEXEC:-/usr/src/tensorrt/bin/trtexec}
 
 for f in refine_model.onnx score_model.onnx; do
