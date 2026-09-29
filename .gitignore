@@ -225,6 +225,7 @@ models/
 *.plan
 *.onnx
 *.pt
+mobileclip_blt.ts
 third_party/
 output/
 install/

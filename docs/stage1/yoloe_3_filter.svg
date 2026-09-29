@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520" role="img" aria-label="Each cell outputs a box, N class scores and 32 mask coefficients. The class score filters 6,300 cells to 23 at conf 0.05, NMS reduces those to 4, max_det keeps 4, and masks are assembled only for those 4 by mixing 32 shared prototypes with each detection's coefficients, upscaling, cropping to the box and thresholding."><style>svg{font-family:'IBM Plex Sans',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
+.b   { fill: #ffffff; stroke: #18202b; stroke-width: 1.4; }
+.bv  { fill: #e1f1f3; stroke: #0b7482; stroke-width: 1.6; }
+.bp  { fill: #fbeade; stroke: #b8521a; stroke-width: 1.6; }
+.bt  { fill: #eef2dc; stroke: #5a6f12; stroke-width: 1.6; }
+.bc  { fill: #ffffff; stroke: #18202b; stroke-width: 2.6; }
+.cellhi { fill: #18202b; opacity: .8; }
+.stripline { stroke: #b8521a; stroke-width: .6; opacity: .5; }
+.big { fill: #18202b; font: 600 22px "IBM Plex Sans Condensed", "Arial Narrow", sans-serif; font-variant-numeric: tabular-nums; }
+.blob { fill: #5a6574; opacity: .45; }
+.blob2 { fill: #5a6574; opacity: .25; }
+.solid { fill: #18202b; }
+.cover { fill: #ffffff; }
+.bd  { fill: none; stroke: #5a6574; stroke-width: 1.2; stroke-dasharray: 4 3; }
+.t   { fill: #18202b; font-size: 13px; }
+.tb  { fill: #18202b; font-size: 13px; font-weight: 600; }
+.ts  { fill: #5a6574; font-size: 11px; }
+.tm  { fill: #5a6574; font-size: 11px; font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; }
+.tv  { fill: #0b7482; font-size: 12px; font-weight: 600; }
+.tp  { fill: #b8521a; font-size: 12px; font-weight: 600; }
+.lane-v { fill: #0b7482; font: 600 11px "IBM Plex Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em; }
+.lane-t { fill: #5a6f12; font: 600 11px "IBM Plex Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em; }
+.lane-s { fill: #5a6574; font: 600 11px "IBM Plex Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em; }
+.tc  { fill: #18202b; font-size: 12px; font-weight: 600; }
+.ac  { stroke: #18202b; stroke-width: 2.2; fill: none; }
+.lane-p { fill: #b8521a; font: 600 11px "IBM Plex Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em; }
+.a   { stroke: #18202b; stroke-width: 1.4; fill: none; }
+.av  { stroke: #0b7482; stroke-width: 1.8; fill: none; }
+.at  { stroke: #5a6f12; stroke-width: 1.8; fill: none; }
+.ap  { stroke: #b8521a; stroke-width: 1.8; fill: none; }
+.hf  { fill: #18202b; } .hv { fill: #0b7482; } .hp { fill: #b8521a; } .ht { fill: #5a6f12; } .hc { fill: #18202b; }
+.rule { stroke: #c3ccd6; stroke-width: 1; }
+
+</style><rect width="100%" height="100%" fill="#ffffff"/>
+        <defs>
+          <marker id="h4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="hf"/></marker>
+          <marker id="h4v" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="hv"/></marker>
+        </defs>
+
+        <!-- A: one row per cell -->
+        <text class="lane-s" x="20" y="22">A · WHAT EACH CELL OUTPUTS (one row, 38 numbers when N = 2)</text>
+        <rect class="b" x="20" y="38" width="80" height="44"/>
+        <rect class="bv" x="100" y="38" width="100" height="44"/>
+        <rect class="b" x="200" y="38" width="240" height="44"/>
+        <text class="tb" x="60" y="58" text-anchor="middle">box</text>
+        <text class="tm" x="60" y="74" text-anchor="middle">4</text>
+        <text class="tb" x="150" y="58" text-anchor="middle">class scores</text>
+        <text class="tm" x="150" y="74" text-anchor="middle">N</text>
+        <text class="tb" x="320" y="58" text-anchor="middle">mask coefficients</text>
+        <text class="tm" x="320" y="74" text-anchor="middle">32</text>
+        <text class="ts" x="452" y="58">× 6,300 cells</text>
+        <text class="ts" x="452" y="74">(8,400 for a square 640 image)</text>
+        <path class="av" d="M150 82 L150 100" marker-end="url(#h4v)"/>
+        <text class="tv" x="160" y="112">the only part your prompts change, and the only part used to filter</text>
+        <text class="ts" x="20" y="112">box, mask: ride along</text>
+
+        <line class="rule" x1="20" y1="132" x2="960" y2="132"/>
+
+        <!-- B: funnel -->
+        <text class="lane-s" x="20" y="158">B · THE FILTER CHAIN</text>
+
+        <rect class="b" x="20" y="175" width="110" height="64" rx="4"/>
+        <text class="big" x="75" y="210" text-anchor="middle">6,300</text>
+        <text class="ts" x="75" y="228" text-anchor="middle">cells</text>
+
+        <line class="a" x1="130" y1="207" x2="218" y2="207" marker-end="url(#h4)"/>
+        <text class="tb" x="174" y="196" text-anchor="middle">conf</text>
+        <text class="ts" x="174" y="226" text-anchor="middle">best score</text>
+        <text class="ts" x="174" y="240" text-anchor="middle">&gt; 0.05?</text>
+
+        <rect class="b" x="220" y="175" width="110" height="64" rx="4"/>
+        <text class="big" x="275" y="210" text-anchor="middle">23</text>
+        <text class="ts" x="275" y="228" text-anchor="middle">candidates</text>
+
+        <line class="a" x1="330" y1="207" x2="418" y2="207" marker-end="url(#h4)"/>
+        <text class="tb" x="374" y="196" text-anchor="middle">NMS</text>
+        <text class="ts" x="374" y="226" text-anchor="middle">same class,</text>
+        <text class="ts" x="374" y="240" text-anchor="middle">IoU &gt; 0.7?</text>
+
+        <rect class="b" x="420" y="175" width="110" height="64" rx="4"/>
+        <text class="big" x="475" y="210" text-anchor="middle">4</text>
+        <text class="ts" x="475" y="228" text-anchor="middle">distinct objects</text>
+
+        <line class="a" x1="530" y1="207" x2="618" y2="207" marker-end="url(#h4)"/>
+        <text class="tb" x="574" y="196" text-anchor="middle">max_det</text>
+        <text class="ts" x="574" y="226" text-anchor="middle">top 300</text>
+        <text class="ts" x="574" y="240" text-anchor="middle">by score</text>
+
+        <rect class="b" x="620" y="175" width="110" height="64" rx="4"/>
+        <text class="big" x="675" y="210" text-anchor="middle">4</text>
+        <text class="ts" x="675" y="228" text-anchor="middle">no effect here</text>
+
+        <line class="a" x1="730" y1="207" x2="818" y2="207" marker-end="url(#h4)"/>
+        <text class="tb" x="774" y="196" text-anchor="middle">masks</text>
+        <text class="ts" x="774" y="226" text-anchor="middle">build (C),</text>
+        <text class="ts" x="774" y="240" text-anchor="middle">drop if empty</text>
+
+        <rect class="bc" x="820" y="175" width="140" height="64" rx="4"/>
+        <text class="big" x="890" y="210" text-anchor="middle">4</text>
+        <text class="ts" x="890" y="228" text-anchor="middle">detections</text>
+
+        <text class="tm" x="20" y="272">at conf 0.25:</text>
+        <text class="tm" x="75" y="290" text-anchor="middle">6,300</text>
+        <text class="tm" x="275" y="290" text-anchor="middle">20</text>
+        <text class="tm" x="475" y="290" text-anchor="middle">2</text>
+        <text class="tm" x="675" y="290" text-anchor="middle">2</text>
+        <text class="tm" x="890" y="290" text-anchor="middle">2</text>
+
+        <line class="rule" x1="20" y1="312" x2="960" y2="312"/>
+
+        <!-- C: mask assembly -->
+        <text class="lane-s" x="20" y="338">C · BUILDING ONE MASK (only for survivors)</text>
+
+        <!-- prototypes stack -->
+        <rect class="b" x="40" y="376" width="64" height="64"/>
+        <rect class="b" x="32" y="368" width="64" height="64"/>
+        <rect class="b" x="24" y="360" width="64" height="64"/>
+        <ellipse class="blob" cx="50" cy="388" rx="18" ry="12"/>
+        <ellipse class="blob" cx="66" cy="404" rx="10" ry="16"/>
+        <text class="tb" x="68" y="466" text-anchor="middle">32 prototypes</text>
+        <text class="ts" x="68" y="481" text-anchor="middle">once per image,</text>
+        <text class="ts" x="68" y="495" text-anchor="middle">shared by all cells</text>
+
+        <text class="tb" x="140" y="405" text-anchor="middle">×</text>
+        <rect class="b" x="160" y="385" width="100" height="30" rx="3"/>
+        <text class="tm" x="210" y="404" text-anchor="middle">.8 −.2 .5 …</text>
+        <text class="tb" x="210" y="466" text-anchor="middle">32 coefficients</text>
+        <text class="ts" x="210" y="481" text-anchor="middle">from this</text>
+        <text class="ts" x="210" y="495" text-anchor="middle">detection's cell</text>
+        <line class="a" x1="260" y1="400" x2="298" y2="400" marker-end="url(#h4)"/>
+
+        <rect class="b" x="300" y="368" width="64" height="64"/>
+        <ellipse class="blob" cx="322" cy="394" rx="16" ry="18"/>
+        <ellipse class="blob2" cx="346" cy="414" rx="12" ry="10"/>
+        <text class="tb" x="332" y="466" text-anchor="middle">weighted sum</text>
+        <text class="ts" x="332" y="481" text-anchor="middle">low-res, ¼ scale</text>
+        <line class="a" x1="364" y1="400" x2="408" y2="400" marker-end="url(#h4)"/>
+
+        <rect class="b" x="410" y="352" width="96" height="96"/>
+        <ellipse class="blob" cx="443" cy="390" rx="24" ry="27"/>
+        <ellipse class="blob2" cx="479" cy="420" rx="18" ry="15"/>
+        <text class="tb" x="458" y="466" text-anchor="middle">upscale</text>
+        <text class="ts" x="458" y="481" text-anchor="middle">to image size</text>
+        <text class="ts" x="458" y="495" text-anchor="middle">(retina_masks)</text>
+        <line class="a" x1="506" y1="400" x2="548" y2="400" marker-end="url(#h4)"/>
+
+        <rect class="b" x="550" y="352" width="96" height="96"/>
+        <rect class="bd" x="560" y="358" width="54" height="64"/>
+        <ellipse class="blob" cx="583" cy="390" rx="24" ry="27"/>
+        <rect class="cover" x="551" y="353" width="9" height="94"/>
+        <rect class="cover" x="614" y="353" width="31" height="94"/>
+        <rect class="cover" x="560" y="422" width="54" height="25"/>
+        <rect class="bd" x="560" y="358" width="54" height="64"/>
+        <text class="tb" x="598" y="466" text-anchor="middle">crop to its box</text>
+        <text class="ts" x="598" y="481" text-anchor="middle">outside box → 0</text>
+        <line class="a" x1="646" y1="400" x2="688" y2="400" marker-end="url(#h4)"/>
+
+        <rect class="b" x="690" y="352" width="96" height="96"/>
+        <ellipse class="solid" cx="723" cy="390" rx="24" ry="27"/>
+        <rect class="cover" x="691" y="353" width="9" height="94"/>
+        <rect class="cover" x="754" y="353" width="31" height="94"/>
+        <rect class="cover" x="700" y="422" width="54" height="25"/>
+        <text class="tb" x="738" y="466" text-anchor="middle">&gt; 0 → on/off</text>
+        <text class="ts" x="738" y="481" text-anchor="middle">binary mask</text>
+        <line class="a" x1="786" y1="400" x2="818" y2="400" marker-end="url(#h4)"/>
+        <text class="t" x="822" y="396">all pixels off?</text>
+        <text class="ts" x="822" y="413">detection dropped</text>
+      </svg>

@@ -97,6 +97,7 @@ def run_container_stages(phrase, label, mesh_path):
     if mesh_path:
         cmd += ['--mesh', mesh_path]
     r = subprocess.run(['docker', 'exec', CONTAINER, 'bash', '-lc', ' '.join(shlex.quote(a) for a in cmd)])
+    subprocess.run(['docker', 'exec', CONTAINER, 'chown', '-R', '%d:%d' % (os.getuid(), os.getgid()), OUT])  # root -> you
     if r.returncode != 0:
         raise SystemExit('container stage failed (rc=%d) -- is `docker start %s` running?' %
                          (r.returncode, CONTAINER))

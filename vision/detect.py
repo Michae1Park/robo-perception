@@ -1,48 +1,32 @@
 """Stage 1: YOLOE-seg detection, prompted by an example image (visual) or a phrase (text).
 
-Visual: each object is registered from one reference image + a box around it. The per-object
-visual prompt embeddings (VPE) are stacked and set as the model's classes, so a single forward
-pass scores every registered object. The model can then be exported to a TensorRT engine with the
-embeddings baked in (see scripts/yoloe_trt.py).
+YOLOE has no fixed class list: each class is an embedding vector, and set_classes() swaps them in.
+  text   : MobileCLIP encodes the phrase                          -> build_text_prompt_model()
+  visual : YOLOE pools its own features inside a box on a ref image -> build_visual_prompt_model()
+  none   : *-seg-pf.pt weights ship a fixed 4585-class vocabulary   -> build_prompt_free_model()
+One forward pass then scores every image region against every class.
 """
 import json
 import os
+import warnings
 
 import numpy as np
 
+from . import REPO
+
+MODELS_DIR = os.path.join(REPO, 'models')  # yoloe-*.pt + mobileclip_blt.ts (text encoder); auto-downloaded here
+
+
+def weights_path(weights):
+    """Bare file names (config.yaml style) resolve to models/; paths are used as given."""
+    return weights if os.path.dirname(weights) else os.path.join(MODELS_DIR, weights)
+
 
 def load_prompt(image_path):
-    """Returns (bgr image, bbox xyxy). bbox comes from <name>.json next to the image, else full image."""
+    """<name>.png + <name>.json ({"bbox": [x0, y0, x1, y1]}) -> (bgr image, bbox)."""
     import cv2
-    img = cv2.imread(image_path, cv2.IMREAD_COLOR)
-    if img is None:
-        raise FileNotFoundError('visual prompt not found: %s' % image_path)
-    meta = os.path.splitext(image_path)[0] + '.json'
-    if os.path.isfile(meta):
-        with open(meta) as f:
-            bbox = [float(v) for v in json.load(f)['bbox']]
-    else:
-        h, w = img.shape[:2]
-        bbox = [0.0, 0.0, float(w - 1), float(h - 1)]
-    return img, bbox
-
-
-def _visual_pe(model, image, bbox, device):
-    """Visual prompt embedding (1, 1, D) for one object box in one reference image."""
-    from ultralytics.models.yolo.yoloe import YOLOEVPSegPredictor
-    vp = dict(bboxes=np.array([bbox], dtype=np.float32), cls=np.array([0]))
-    try:
-        # ultralytics >= 8.3.1xx: predictor keeps the embedding when return_vpe=True
-        model.predict(image, visual_prompts=vp, predictor=YOLOEVPSegPredictor,
-                      return_vpe=True, device=device, verbose=False)
-        vpe = model.predictor.vpe
-    except Exception:
-        # fallback: refer_image path sets the embedding as the model's class embedding
-        model.predict(image, refer_image=image, visual_prompts=vp, predictor=YOLOEVPSegPredictor,
-                      device=device, verbose=False)
-        vpe = model.model.pe
-    model.predictor = None
-    return vpe.detach().clone()
+    with open(os.path.splitext(image_path)[0] + '.json') as f:
+        return cv2.imread(image_path), [float(v) for v in json.load(f)['bbox']]
 
 
 def build_visual_prompt_model(weights, prompts, device='cuda:0'):
@@ -50,46 +34,54 @@ def build_visual_prompt_model(weights, prompts, device='cuda:0'):
     import torch
     import torch.nn.functional as F
     from ultralytics import YOLOE
+    from ultralytics.models.yolo.yoloe import YOLOEVPSegPredictor
 
-    model = YOLOE(weights)
-    names, vpes = [], []
-    for name, img, bbox in prompts:
-        vpes.append(_visual_pe(model, img, bbox, device).to('cpu').reshape(1, 1, -1))
-        names.append(name)
-    vpe = F.normalize(torch.cat(vpes, dim=1), dim=-1, p=2)
-    model.set_classes(names, vpe)
-    model.predictor = None
+    model = YOLOE(weights_path(weights))
+    vpes = []
+    for _, img, bbox in prompts:  # one predict per ref image; it leaves the box's embedding in model.model.pe
+        vp = dict(bboxes=np.array([bbox], dtype=np.float32), cls=np.array([0]))
+        model.predict(img, refer_image=img, visual_prompts=vp, predictor=YOLOEVPSegPredictor,
+                      device=device, verbose=False)
+        vpes.append(model.model.pe.detach().cpu().reshape(1, 1, -1))
+    model.set_classes([p[0] for p in prompts], F.normalize(torch.cat(vpes, dim=1), dim=-1))
+    model.predictor = None  # drop the visual-prompt predictor; the next predict() builds a normal one
     return model
 
 
 def build_text_prompt_model(weights, texts, device='cuda:0'):
-    """texts: list of open-vocabulary class-name strings (no reference image needed). Returns a
-    YOLOE model whose classes are those texts -- same detect()-compatible model as
-    build_visual_prompt_model(), just prompted by text instead of an example image."""
+    """texts: list of class-name phrases. Returns a YOLOE model whose classes are those phrases."""
     from ultralytics import YOLOE
 
-    model = YOLOE(weights)
-    model.set_classes(texts, model.get_text_pe(texts))
-    model.predictor = None
+    model = YOLOE(weights_path(weights))
+    cwd = os.getcwd()
+    os.chdir(MODELS_DIR)  # ultralytics looks for / downloads mobileclip_blt.ts in the cwd
+    with warnings.catch_warnings():  # newer torch deprecates the jit.load used for mobileclip_blt.ts
+        warnings.filterwarnings('ignore', message='.*torch.jit.load.*', category=FutureWarning)
+        model.set_classes(texts, model.get_text_pe(texts))
+    os.chdir(cwd)
     return model
 
 
-def detect(model, bgr, conf=0.05, device='cuda:0', half=False):
-    """Returns list of dicts: name, score, bbox (xyxy), mask (HxW bool, image resolution)."""
-    res = model.predict(bgr, conf=conf, retina_masks=True, device=device, half=half, verbose=False)[0]
-    out = []
-    if res.boxes is None or len(res.boxes) == 0:
-        return out
-    boxes = res.boxes.xyxy.cpu().numpy()
-    scores = res.boxes.conf.cpu().numpy()
-    classes = res.boxes.cls.cpu().numpy().astype(int)
-    masks = res.masks.data.cpu().numpy() > 0.5 if res.masks is not None else None
-    h, w = bgr.shape[:2]
-    for i in range(len(boxes)):
-        m = masks[i] if masks is not None else None
-        if m is not None and m.shape != (h, w):
-            import cv2
-            m = cv2.resize(m.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST) > 0
-        out.append({'name': res.names[int(classes[i])], 'score': float(scores[i]),
-                    'bbox': [float(v) for v in boxes[i]], 'mask': m})
-    return out
+def build_prompt_free_model(weights):
+    """weights: a *-seg-pf.pt file. Returns a YOLOE model with its built-in vocabulary; set_classes() is not allowed."""
+    from ultralytics import YOLOE
+
+    if not weights.endswith('-pf.pt'):
+        raise ValueError('prompt-free needs *-seg-pf.pt weights, got %s' % weights)
+    return YOLOE(weights_path(weights))
+
+
+def detect_kwargs(cfg):
+    """The `detect` section of config.yaml -> keyword args for detect()."""
+    return {k: cfg[k] for k in ('conf', 'device', 'half', 'iou', 'imgsz', 'max_det')}
+
+
+def detect(model, bgr, **predict_kwargs):
+    """Returns list of dicts: name, score, bbox (xyxy), mask (HxW bool, image resolution).
+    predict_kwargs go straight to ultralytics predict(): conf, iou, imgsz, max_det, half, device."""
+    res = model.predict(bgr, retina_masks=True, verbose=False, **predict_kwargs)[0]  # retina: masks at image res
+    if not len(res.boxes):
+        return []
+    b = res.boxes
+    return [{'name': res.names[int(c)], 'score': float(s), 'bbox': box.tolist(), 'mask': m > 0.5}
+            for c, s, box, m in zip(b.cls.cpu(), b.conf.cpu(), b.xyxy.cpu().numpy(), res.masks.data.cpu().numpy())]

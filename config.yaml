@@ -1,9 +1,13 @@
 # All tunable parameters of the vision pipeline. Units: metres, degrees.
 # Read by pipeline/*.py via vision.load_config().
 
-detect:                       # stage 1 (YOLOE)
-  weights: yoloe-11l-seg.pt   # auto-downloaded by ultralytics on first run
-  conf: 0.05                  # min confidence for a raw detection
+detect:                       # stage 1 (YOLOE) - used by every stage 1 script + the notebook
+  weights: yoloe-11l-seg.pt   # file in models/ (auto-downloaded). yoloe-11s/m/l-seg.pt: s = faster, l = more accurate
+  conf: 0.05                  # drop detections scoring below this (precision/recall dial)
+  iou: 0.7                    # NMS: overlapping boxes above this IoU are merged (lower = fewer duplicates)
+  imgsz: 640                  # inference resolution (higher = small objects + finer masks, slower)
+  max_det: 300                # keep at most this many detections
+  half: false                 # FP16 inference
   device: cuda:0
 
 pose:                         # stage 2 (FoundationPose)

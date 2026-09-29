@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="640" viewBox="0 0 980 640" role="img" aria-label="Scene image passes through backbone and neck into three branches run on every grid cell. Box and mask branches are identical in both models. The class branch output, 256 numbers per cell, feeds a fork: prompted models compare it with N prompt vectors; the prompt-free model first filters cells with an objectness check, then compares survivors with 4,585 vocabulary vectors."><style>svg{font-family:'IBM Plex Sans',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
+.b   { fill: #ffffff; stroke: #18202b; stroke-width: 1.4; }
+.bv  { fill: #e1f1f3; stroke: #0b7482; stroke-width: 1.6; }
+.bp  { fill: #fbeade; stroke: #b8521a; stroke-width: 1.6; }
+.bt  { fill: #eef2dc; stroke: #5a6f12; stroke-width: 1.6; }
+.bc  { fill: #ffffff; stroke: #18202b; stroke-width: 2.6; }
+.cellhi { fill: #18202b; opacity: .8; }
+.stripline { stroke: #b8521a; stroke-width: .6; opacity: .5; }
+.big { fill: #18202b; font: 600 22px "IBM Plex Sans Condensed", "Arial Narrow", sans-serif; font-variant-numeric: tabular-nums; }
+.blob { fill: #5a6574; opacity: .45; }
+.blob2 { fill: #5a6574; opacity: .25; }
+.solid { fill: #18202b; }
+.cover { fill: #ffffff; }
+.bd  { fill: none; stroke: #5a6574; stroke-width: 1.2; stroke-dasharray: 4 3; }
+.t   { fill: #18202b; font-size: 13px; }
+.tb  { fill: #18202b; font-size: 13px; font-weight: 600; }
+.ts  { fill: #5a6574; font-size: 11px; }
+.tm  { fill: #5a6574; font-size: 11px; font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; }
+.tv  { fill: #0b7482; font-size: 12px; font-weight: 600; }
+.tp  { fill: #b8521a; font-size: 12px; font-weight: 600; }
+.lane-v { fill: #0b7482; font: 600 11px "IBM Plex Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em; }
+.lane-t { fill: #5a6f12; font: 600 11px "IBM Plex Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em; }
+.lane-s { fill: #5a6574; font: 600 11px "IBM Plex Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em; }
+.tc  { fill: #18202b; font-size: 12px; font-weight: 600; }
+.ac  { stroke: #18202b; stroke-width: 2.2; fill: none; }
+.lane-p { fill: #b8521a; font: 600 11px "IBM Plex Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em; }
+.a   { stroke: #18202b; stroke-width: 1.4; fill: none; }
+.av  { stroke: #0b7482; stroke-width: 1.8; fill: none; }
+.at  { stroke: #5a6f12; stroke-width: 1.8; fill: none; }
+.ap  { stroke: #b8521a; stroke-width: 1.8; fill: none; }
+.hf  { fill: #18202b; } .hv { fill: #0b7482; } .hp { fill: #b8521a; } .ht { fill: #5a6f12; } .hc { fill: #18202b; }
+.rule { stroke: #c3ccd6; stroke-width: 1; }
+
+</style><rect width="100%" height="100%" fill="#ffffff"/>
+        <defs>
+          <marker id="h1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="hf"/></marker>
+          <marker id="h1v" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="hv"/></marker>
+          <marker id="h1p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="hp"/></marker>
+          <marker id="h1c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="hc"/></marker>
+        </defs>
+
+        <text class="lane-s" x="20" y="22">SHARED · identical numbers in both files</text>
+
+        <!-- trunk -->
+        <rect class="b" x="20" y="105" width="100" height="70" rx="4"/>
+        <text class="tb" x="70" y="135" text-anchor="middle">scene image</text>
+        <text class="tm" x="70" y="153" text-anchor="middle">640×640</text>
+        <line class="a" x1="120" y1="140" x2="158" y2="140" marker-end="url(#h1)"/>
+
+        <rect class="b" x="160" y="95" width="110" height="90" rx="4"/>
+        <text class="tb" x="215" y="130" text-anchor="middle">backbone</text>
+        <text class="tm" x="215" y="148" text-anchor="middle">12.9M params</text>
+        <line class="a" x1="270" y1="140" x2="308" y2="140" marker-end="url(#h1)"/>
+
+        <rect class="b" x="310" y="95" width="110" height="90" rx="4"/>
+        <text class="tb" x="365" y="130" text-anchor="middle">neck</text>
+        <text class="tm" x="365" y="148" text-anchor="middle">11.1M params</text>
+        <line class="a" x1="420" y1="140" x2="458" y2="140" marker-end="url(#h1)"/>
+
+        <rect class="b" x="460" y="70" width="140" height="140" rx="4"/>
+        <text class="tb" x="530" y="95" text-anchor="middle">3 feature grids</text>
+        <text class="tm" x="530" y="120" text-anchor="middle">80×80 ×256</text>
+        <text class="tm" x="530" y="138" text-anchor="middle">40×40 ×512</text>
+        <text class="tm" x="530" y="156" text-anchor="middle">20×20 ×512</text>
+        <line class="rule" x1="475" y1="170" x2="585" y2="170"/>
+        <text class="ts" x="530" y="192" text-anchor="middle">= 8,400 grid cells</text>
+
+        <path class="a" d="M600 140 C630 140 630 58 658 58" marker-end="url(#h1)"/>
+        <line class="a" x1="600" y1="140" x2="658" y2="140" marker-end="url(#h1)"/>
+        <path class="ac" d="M600 140 C630 140 630 222 658 222" marker-end="url(#h1c)"/>
+        <text class="ts" x="629" y="128" text-anchor="middle">every cell</text>
+
+        <rect class="b" x="660" y="32" width="150" height="52" rx="4"/>
+        <text class="tb" x="735" y="54" text-anchor="middle">box branch</text>
+        <text class="tm" x="735" y="72" text-anchor="middle">cv2 → DFL</text>
+        <line class="a" x1="810" y1="58" x2="848" y2="58" marker-end="url(#h1)"/>
+        <text class="t" x="852" y="54">box per cell</text>
+        <text class="ts" x="852" y="71">(lrpc.loc in -pf)</text>
+
+        <rect class="b" x="660" y="114" width="150" height="52" rx="4"/>
+        <text class="tb" x="735" y="136" text-anchor="middle">mask branch</text>
+        <text class="tm" x="735" y="154" text-anchor="middle">cv5 + proto</text>
+        <line class="a" x1="810" y1="140" x2="848" y2="140" marker-end="url(#h1)"/>
+        <text class="t" x="852" y="136">mask per cell</text>
+
+        <rect class="bc" x="660" y="196" width="150" height="52" rx="4"/>
+        <text class="tb" x="735" y="218" text-anchor="middle">class branch</text>
+        <text class="tm" x="735" y="236" text-anchor="middle">cv3 (first 2 layers)</text>
+
+        <!-- the connection: class branch output drops into the zoom -->
+        <path class="ac" d="M735 248 L735 280 L90 280 L90 318" marker-end="url(#h1c)"/>
+        <text class="tc" x="412" y="272" text-anchor="middle">output: 256 numbers for each of the 8,400 cells. Zoom in on one cell ↓</text>
+
+        <line class="rule" x1="20" y1="296" x2="960" y2="296" stroke-dasharray="2 4"/>
+
+        <!-- zoom: one cell --><rect class="b" x="42" y="340" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="54" y="340" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="66" y="340" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="78" y="340" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="90" y="340" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="102" y="340" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="114" y="340" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="126" y="340" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="42" y="352" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="54" y="352" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="66" y="352" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="78" y="352" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="90" y="352" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="102" y="352" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="114" y="352" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="126" y="352" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="42" y="364" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="54" y="364" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="66" y="364" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="78" y="364" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="90" y="364" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="102" y="364" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="114" y="364" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="126" y="364" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="42" y="376" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="54" y="376" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="66" y="376" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="78" y="376" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="90" y="376" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="102" y="376" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="114" y="376" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="126" y="376" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="42" y="388" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="54" y="388" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="66" y="388" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="78" y="388" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="90" y="388" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="102" y="388" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="114" y="388" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="126" y="388" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="42" y="400" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="54" y="400" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="66" y="400" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="78" y="400" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="90" y="400" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="102" y="400" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="114" y="400" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="126" y="400" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="42" y="412" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="54" y="412" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="66" y="412" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="78" y="412" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="90" y="412" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="102" y="412" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="114" y="412" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="126" y="412" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="42" y="424" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="54" y="424" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="66" y="424" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="78" y="424" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="90" y="424" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="102" y="424" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="114" y="424" width="12" height="12" style="stroke-width:.6"/><rect class="b" x="126" y="424" width="12" height="12" style="stroke-width:.6"/><rect class="cellhi" x="114" y="364" width="12" height="12"/><rect class="bc" x="205" y="330" width="26" height="215" rx="3"/><line class="stripline" x1="205" y1="338" x2="231" y2="338"/><line class="stripline" x1="205" y1="346" x2="231" y2="346"/><line class="stripline" x1="205" y1="354" x2="231" y2="354"/><line class="stripline" x1="205" y1="362" x2="231" y2="362"/><line class="stripline" x1="205" y1="370" x2="231" y2="370"/><line class="stripline" x1="205" y1="378" x2="231" y2="378"/><line class="stripline" x1="205" y1="386" x2="231" y2="386"/><line class="stripline" x1="205" y1="394" x2="231" y2="394"/><line class="stripline" x1="205" y1="402" x2="231" y2="402"/><line class="stripline" x1="205" y1="410" x2="231" y2="410"/><line class="stripline" x1="205" y1="418" x2="231" y2="418"/><line class="stripline" x1="205" y1="426" x2="231" y2="426"/><line class="stripline" x1="205" y1="434" x2="231" y2="434"/><line class="stripline" x1="205" y1="442" x2="231" y2="442"/><line class="stripline" x1="205" y1="450" x2="231" y2="450"/><line class="stripline" x1="205" y1="458" x2="231" y2="458"/><line class="stripline" x1="205" y1="466" x2="231" y2="466"/><line class="stripline" x1="205" y1="474" x2="231" y2="474"/><line class="stripline" x1="205" y1="482" x2="231" y2="482"/><line class="stripline" x1="205" y1="490" x2="231" y2="490"/><line class="stripline" x1="205" y1="498" x2="231" y2="498"/><line class="stripline" x1="205" y1="506" x2="231" y2="506"/><line class="stripline" x1="205" y1="514" x2="231" y2="514"/><line class="stripline" x1="205" y1="522" x2="231" y2="522"/><line class="stripline" x1="205" y1="530" x2="231" y2="530"/><line class="stripline" x1="205" y1="538" x2="231" y2="538"/>
+        
+        <text class="ts" x="90" y="490" text-anchor="middle">80×80 grid (drawn 8×8)</text>
+        <text class="ts" x="90" y="505" text-anchor="middle">highlighted = one cell</text>
+        <path class="ac" d="M117 373 C160 373 170 440 203 440" marker-end="url(#h1c)"/>
+        <text class="tc" x="218" y="560" text-anchor="middle">256 numbers</text>
+        <text class="ts" x="218" y="575" text-anchor="middle">this cell's</text>
+        <text class="ts" x="218" y="589" text-anchor="middle">class feature</text>
+
+        <!-- fork -->
+        <path class="av" d="M231 440 C258 440 258 375 288 375" marker-end="url(#h1v)"/>
+        <path class="ap" d="M231 440 C258 440 258 535 288 535" marker-end="url(#h1p)"/>
+
+        <!-- prompted lane -->
+        <text class="lane-v" x="290" y="330">TEXT- OR VISUAL-PROMPTED · yoloe-11l-seg.pt</text>
+        <rect class="bv" x="290" y="345" width="110" height="60" rx="4"/>
+        <text class="tb" x="345" y="370" text-anchor="middle">project up</text>
+        <text class="tm" x="345" y="388" text-anchor="middle">256 → 512</text>
+        <line class="av" x1="400" y1="375" x2="438" y2="375" marker-end="url(#h1v)"/>
+
+        <rect class="bv" x="440" y="345" width="170" height="60" rx="4"/>
+        <text class="tb" x="525" y="370" text-anchor="middle">compare with prompts</text>
+        <text class="ts" x="525" y="388" text-anchor="middle">cv4: dot · ×scale + bias</text>
+        <rect class="bd" x="440" y="425" width="170" height="30" rx="4"/>
+        <text class="tv" x="525" y="445" text-anchor="middle">N prompt vectors ×512</text>
+        <line class="av" x1="525" y1="425" x2="525" y2="407" marker-end="url(#h1v)"/>
+        <text class="ts" x="620" y="445">made in Fig 2</text>
+        <line class="av" x1="610" y1="375" x2="648" y2="375" marker-end="url(#h1v)"/>
+
+        <rect class="bv" x="650" y="345" width="130" height="60" rx="4"/>
+        <text class="tb" x="715" y="370" text-anchor="middle">N scores</text>
+        <text class="ts" x="715" y="388" text-anchor="middle">every cell</text>
+        <line class="av" x1="780" y1="375" x2="818" y2="375" marker-end="url(#h1v)"/>
+        <text class="t" x="822" y="371">best prompt</text>
+        <text class="ts" x="822" y="388">keep if &gt; conf</text>
+
+        <!-- prompt-free lane -->
+        <text class="lane-p" x="290" y="490">PROMPT-FREE · yoloe-11l-seg-pf.pt</text>
+        <rect class="bp" x="290" y="505" width="110" height="60" rx="4"/>
+        <text class="tb" x="345" y="530" text-anchor="middle">object?</text>
+        <text class="tm" x="345" y="548" text-anchor="middle">lrpc.pf · 1×256</text>
+        <line class="ap" x1="400" y1="535" x2="438" y2="535" marker-end="url(#h1p)"/>
+
+        <rect class="bp" x="440" y="505" width="100" height="60" rx="4"/>
+        <text class="tb" x="490" y="530" text-anchor="middle">gate</text>
+        <text class="ts" x="490" y="548" text-anchor="middle">&gt; conf?</text>
+        <line class="ap" x1="540" y1="535" x2="578" y2="535" marker-end="url(#h1p)"/>
+        <text class="ts" x="559" y="526" text-anchor="middle">yes</text>
+        <path class="ap" d="M490 565 L490 598" stroke-dasharray="3 3" marker-end="url(#h1p)"/>
+        <text class="ts" x="500" y="613">no: cell dropped, never named</text>
+
+        <rect class="bp" x="580" y="505" width="150" height="60" rx="4"/>
+        <text class="tb" x="655" y="530" text-anchor="middle">compare with vocab</text>
+        <text class="tm" x="655" y="548" text-anchor="middle">lrpc.vocab 4,585×256</text>
+        <line class="ap" x1="730" y1="535" x2="768" y2="535" marker-end="url(#h1p)"/>
+
+        <rect class="bp" x="770" y="505" width="110" height="60" rx="4"/>
+        <text class="tb" x="825" y="530" text-anchor="middle">4,585 scores</text>
+        <text class="ts" x="825" y="548" text-anchor="middle">kept cells only</text>
+        <line class="ap" x1="880" y1="535" x2="908" y2="535" marker-end="url(#h1p)"/>
+        <text class="t" x="912" y="531">top</text>
+        <text class="t" x="912" y="547">name</text>
+      </svg>

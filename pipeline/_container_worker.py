@@ -14,7 +14,7 @@ import numpy as np
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 from vision import load_config, pose  # noqa: E402
-from vision.detect import build_text_prompt_model, detect  # noqa: E402
+from vision.detect import build_text_prompt_model, detect, detect_kwargs  # noqa: E402
 from vision.viz import draw_detection  # noqa: E402
 
 SCENE = os.path.join(REPO, 'data', 'multi_object_scene')
@@ -35,7 +35,7 @@ def main():
 
     scene_bgr = cv2.imread(os.path.join(SCENE, 'scene_rgb.png'), cv2.IMREAD_COLOR)
     model = build_text_prompt_model(dcfg['weights'], [args.phrase], dcfg['device'])
-    dets = [d for d in detect(model, scene_bgr, conf=dcfg['conf'], device=dcfg['device'])
+    dets = [d for d in detect(model, scene_bgr, **detect_kwargs(dcfg))
             if d['mask'] is not None]
 
     result = {'phrase': args.phrase, 'label': args.label, 'detected': False, 'pose': None}

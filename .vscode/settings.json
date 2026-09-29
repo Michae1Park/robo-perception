@@ -1,0 +1,4 @@
+{
+  // ipywidgets JS is fetched by the notebook webview (on the SSH client). unpkg fails from here; try jsDelivr first.
+  "jupyter.widgetScriptSources": ["jsdelivr.com", "unpkg.com"]
+}

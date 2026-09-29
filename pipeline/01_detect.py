@@ -3,7 +3,7 @@
 
 Prompt : box around the mustard bottle in frame 0 (from the dataset's GT mask).
 Scene  : frame 736 of the same sequence (a different frame, so it is real matching).
-Runs   : inside the `foundationpose` container (needs torch + ultralytics).
+Runs   : host, .venv/bin/python (needs torch + ultralytics).
 In     : third_party/FoundationPose/demo_data/mustard0/
 Out    : output/01_detection.png, 01_mask.png, 01_result.json
 """
@@ -18,7 +18,7 @@ import numpy as np
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 from vision import load_config  # noqa: E402
-from vision.detect import build_visual_prompt_model, detect  # noqa: E402
+from vision.detect import build_visual_prompt_model, detect, detect_kwargs  # noqa: E402
 from vision.viz import draw_detection  # noqa: E402
 
 DATA = os.path.join(REPO, 'third_party', 'FoundationPose', 'demo_data', 'mustard0')
@@ -40,7 +40,7 @@ def main():
     scene_bgr = cv2.imread(frames[TARGET_FRAME], cv2.IMREAD_COLOR)
 
     model = build_visual_prompt_model(cfg['weights'], [(OBJECT_NAME, ref_bgr, ref_bbox)], cfg['device'])
-    dets = detect(model, scene_bgr, conf=cfg['conf'], device=cfg['device'])
+    dets = detect(model, scene_bgr, **detect_kwargs(cfg))
     cands = [d for d in dets if d['name'] == OBJECT_NAME and d['mask'] is not None]
     if not cands:
         raise SystemExit('no detection of %s in frame %s (%d raw detections)' %
