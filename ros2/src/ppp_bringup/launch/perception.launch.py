@@ -1,7 +1,7 @@
 """Perception, one node per stage (D-010), all request-driven (D-016):
 
   detect_node   (Python, YOLOE)          fixed camera        ~/detect
-  FoundationPose (Isaac ROS 4.5, Docker)  one per target      /ppp/fp/<target>/...   (foundationpose:=true)
+  FoundationPose (Isaac ROS 4.5, Docker)  one, mesh per call  /ppp/fp/...            (foundationpose:=true)
   pose_node     (Python)                  detect + FP + TF    ~/estimate_pose
   spatial_node  (C++, ppp_geometry)       fixed camera        ~/analyze_table
   grasp_node    (Python)                  spatial + pose      ~/plan_grasps
@@ -55,6 +55,6 @@ def generate_launch_description():
         py_node('place_node', [('depth/image_raw', WRIST + '/aligned_depth_to_color/image_raw'),
                                ('depth/camera_info', WRIST + '/aligned_depth_to_color/camera_info')]),
         py_node('eval_node', params={'targets': TARGETS}, condition=IfCondition(LaunchConfiguration('eval'))),
-        ExecuteProcess(cmd=[os.path.join(REPO, 'docker', 'foundationpose.sh')] + TARGETS, output='screen',
+        ExecuteProcess(cmd=[os.path.join(REPO, 'docker', 'foundationpose.sh'), TARGETS[0]], output='screen',
                        condition=IfCondition(LaunchConfiguration('foundationpose'))),
     ])

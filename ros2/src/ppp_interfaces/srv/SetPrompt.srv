@@ -1,0 +1,13 @@
+# Stage 1: prompt the robot. A phrase, or an example image with a box around the object, says WHICH object (its best
+# detection in the latest fixed-camera frame); the library (stored example + mesh per target) says WHAT it is. If it
+# is a target, that target's Detect sends the prompt's mask from now on. No text and no image: back to the library.
+string text                      # e.g. "the yellow bottle"; ignored when an image is given
+sensor_msgs/Image image          # example image (rgb8 / bgr8); empty = text prompt
+float32[4] bbox                  # the object in that image, x0 y0 x1 y1 (px); all 0 = the whole image
+---
+bool found                       # the prompt matched something in the frame
+string target                    # the target it was taken for; "" = nothing the robot can pick
+string label                     # the target, else what the text check calls it
+float32 score                    # the prompt's detection score
+float32[4] bbox                  # in the camera image (px)
+string message

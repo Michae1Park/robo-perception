@@ -28,7 +28,7 @@ along the way. Newest entries go at the bottom of each list.
 | [D-013](#d-013) | 2026-09-29 | Robot stays a Franka Panda (demo, not deployment) | Accepted |
 | [D-014](#d-014) | 2026-09-29 | Task logic in BehaviorTree.CPP v4 (C++) | Accepted |
 | [D-015](#d-015) | 2026-09-29 | Robot control through ros2_control hosted inside Isaac Sim | Accepted (built 2026-09-30) |
-| [D-016](#d-016) | 2026-09-29 | Perception is request-driven; one FoundationPose instance per target | Accepted (built 2026-09-30) |
+| [D-016](#d-016) | 2026-09-29 | Perception is request-driven; one FoundationPose instance per target | Accepted; one instance per target superseded by [D-043](#d-043) |
 | [D-017](#d-017) | 2026-09-29 | View ROS data from the laptop with Foxglove | Accepted (`foxglove:=true`; not yet tried from the laptop) |
 | [D-018](#d-018) | 2026-09-29 | Keep this log in the repo (`docs/DECISIONS.md`) | Accepted |
 | [D-019](#d-019) | 2026-09-29 | One shared C++ RANSAC library for stages 3 and 5, with a Python binding | Accepted |
@@ -54,6 +54,8 @@ along the way. Newest entries go at the bottom of each list.
 | [D-039](#d-039) | 2026-09-30 | Vision reliability: vision nodes detect and report, the behavior tree decides | Proposed |
 | [D-040](#d-040) | 2026-09-30 | Shelf stays at its D-035 distance; STOMP joins the planners after "via home" | Accepted |
 | [D-041](#d-041) | 2026-09-30 | Floor-standing metal pantry, long narrow table, fixed camera re-aimed | Accepted |
+| [D-042](#d-042) | 2026-09-30 | Prompt UI: the prompt says which object, the object library says what it is | Accepted |
+| [D-043](#d-043) | 2026-09-30 | One FoundationPose for every object (mesh loaded per request); all five table objects are targets | Accepted |
 
 ### D-001
 **Keep YOLOE-seg (not OWLv2 + SAM2).** One `ultralytics` model gives box + mask in a single pass and was
@@ -403,6 +405,33 @@ collision-free carry onto 0.45 (once each target); at 0.95 m (0.48 m clear), 3 e
 3/3**, with placements on both the 0.05 and the 0.45 board. The wrist camera's look pose is unchanged; it sees the
 0.05 and 0.45 boards, not the ones above.
 
+### D-042
+**Prompt the robot from a web page** (`ui/prompt_ui.py`, `detect_node ~/set_prompt`, [ROS.md](ROS.md#prompt-ui)), so the
+demo shows the prompt going in. The user's phrase or example image drives detection; the robot can still only pick
+what it has a mesh for (FoundationPose is model-based), so the prompt is split into two questions:
+
+| Question | Answered by |
+|---|---|
+| Which object is meant? | The user's prompt: its best YOLOE detection in the live frame. Its mask is what FoundationPose gets during the task |
+| What is it (which mesh)? | The library: each target found by its stored example image + text check (the measured `Detect`, D-025). The target whose mask overlaps the prompt's (IoU > 0.5) |
+
+Not the text check alone: it calls the lying tomato can a "bottle" (0.54, no "tomato soup can" at all), so it accepted
+"the rubik's cube" as the mustard bottle and rejected "the red can". Example images are also tried padded (the object
+100 and 160 px across on a 640 × 480 canvas): tight crops, where the object fills the image, matched weakly or not
+at all (mustard 0.37 → 0.63, tomato can nothing → 0.58). Web page, not a desktop window: the user works from a laptop.
+
+### D-043
+**One FoundationPose instance, the mesh loaded per request** (supersedes the one-instance-per-target part of
+[D-016](#d-016)). The refine and score networks don't depend on the object; only the mesh does. One instance takes
+6.4 GB of VRAM, so one per object would need ~32 GB for five. `pose_node` sets `/ppp/fp/foundationpose`
+`mesh_file_path` before each request (the node reloads it) and serialises requests; topics lose the `<target>` level
+(`/ppp/fp/{image, ..., output}`). Mesh switch + pose: 1.3–2.2 s.
+
+With that, **every table object with a mesh is a target** (`config.yaml objects`, which the launch files read): mustard
+bottle, tomato can, Rubik's cube, sugar box, foam brick. The three new ones got stored example images in
+`data/cell_refs/` (the cell's fixed-camera frame + a box): crops of the rendered objects matched weakly. First poses,
+all five, within 5 mm of where the sim placed them. Whole cell, 12 GB of VRAM (sim 4.2, FoundationPose 6.4, YOLOE 1.2).
+
 ## Issues
 
 | ID | Date | Issue | Status |
@@ -444,6 +473,8 @@ collision-free carry onto 0.45 (once each target); at 0.95 m (0.48 m clear), 3 e
 | [I-035](#i-035) | 2026-09-30 | Via-home second leg planned from exact home; MoveIt refused it (start 0.02 rad off) | Resolved |
 | [I-036](#i-036) | 2026-09-30 | pick_ik needs apt (sudo); built from source in `third_party/` to validate | Resolved (apt) |
 | [I-037](#i-037) | 2026-09-30 | A can set down at the top board's end ended up off the shelf | Open |
+| [I-038](#i-038) | 2026-09-30 | The pose overlay is drawn in the scene, so the cameras see it too | Workaround |
+| [I-039](#i-039) | 2026-09-30 | With five targets the pantry fills: late carries collide with objects already placed | Open |
 
 ### I-001
 Python fails with errors ordinary code can't produce: `unknown opcode`, `invalid SRE code`, a bogus
@@ -642,6 +673,14 @@ from apt, the source build deleted. (Without either, every IK request fails: bot
 Episode 0 (D-037 batch): the task placed the can upright at (0.32, −0.66) on the top board, 20 cm from its open
 right end, and reported PLACED; ground truth then had it lying off the shelf. Probably knocked while the fingers
 backed out (`depart` is only partly feasible near the reach limit). Not yet reproduced.
+
+### I-038
+The pose overlay ([D-034](#d-034)) draws lines into the Isaac scene, and the cameras render them like any other object,
+which can spoil detections. **Workaround:** `ros_cell.py --overlay`, off by default, for watching and recording only.
+
+### I-039
+Five targets instead of two: in the first episode the sugar box (4th) was picked, but every carry path to its
+placement collided with objects already on the shelf (`held_sugar_box-shelf_clutter`), and the task gave it up.
 
 | ID | Question | Notes |
 |---|---|---|

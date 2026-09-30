@@ -1,10 +1,11 @@
-"""Stage 2 node: EstimatePose = detect the target, then its 6-DoF pose from that target's FoundationPose instance.
+"""Stage 2 node: EstimatePose = detect the target, then its 6-DoF pose from FoundationPose.
 
-Service ~/estimate_pose (ppp_interfaces/EstimatePose):
-  1. detect_node ~/detect with publish_for_pose -> the frame + mask go to /ppp/fp/<target>/...
-  2. wait for FoundationPose's answer on /ppp/fp/<target>/output (vision_msgs/Detection3DArray) with that frame's
-     stamp (Isaac ROS 4.5 in its container, one instance per target: D-012, D-016)
-  3. camera -> base frame through TF (calibrated extrinsics), returned and published on ~/pose
+Service ~/estimate_pose (ppp_interfaces/EstimatePose), one request at a time:
+  1. load the target's mesh into the one FoundationPose instance (its mesh_file_path parameter, D-043)
+  2. detect_node ~/detect with publish_for_pose -> the frame + mask go to /ppp/fp/...
+  3. wait for FoundationPose's answer on /ppp/fp/output (vision_msgs/Detection3DArray) with that frame's stamp
+     (Isaac ROS 4.5 in its container: D-012, D-016)
+  4. camera -> base frame through TF (calibrated extrinsics), returned and published on ~/pose
 """
 import threading
 
@@ -13,12 +14,16 @@ from geometry_msgs.msg import PoseStamped
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from rclpy.parameter import Parameter
+from rcl_interfaces.srv import SetParameters
 from tf2_ros import Buffer, TransformListener
 from vision_msgs.msg import Detection3DArray
 
 from ppp_interfaces.srv import Detect, EstimatePose
 
-from .common import BASE, T_to_pose_stamped, call, lookup_T, pose_to_T, stamp_sec
+from .common import BASE, T_to_pose_stamped, call, lookup_T, mesh_path, pose_to_T, stamp_sec
+
+FP_NODE = '/ppp/fp/foundationpose'
 
 
 class PoseNode(Node):
@@ -30,31 +35,54 @@ class PoseNode(Node):
         self.tf = Buffer()
         self.tf_listener = TransformListener(self.tf, self, spin_thread=True)
         self.detect = self.create_client(Detect, '/detect_node/detect', callback_group=self.cb)
+        self.set_fp_params = self.create_client(SetParameters, FP_NODE + '/set_parameters', callback_group=self.cb)
+        self.mesh = None   # the mesh FoundationPose has loaded (as far as this node knows)
+        self.busy = threading.Lock()   # one FoundationPose, so one request at a time
         self.cond = threading.Condition()
-        self.latest = {}   # target -> Detection3DArray
-        for t in self.targets:
-            self.create_subscription(Detection3DArray, '/ppp/fp/%s/output' % t,
-                                     lambda m, t=t: self.on_output(t, m), 5, callback_group=self.cb)
+        self.latest = None   # Detection3DArray
+        self.create_subscription(Detection3DArray, '/ppp/fp/output', self.on_output, 5, callback_group=self.cb)
         self.pose_pub = self.create_publisher(PoseStamped, '~/pose', 5)
         self.create_service(EstimatePose, '~/estimate_pose', self.on_request, callback_group=self.cb)
-        self.get_logger().info('ready: FoundationPose outputs for %s' % ', '.join(self.targets))
+        self.get_logger().info('ready: one FoundationPose for %s' % ', '.join(self.targets))
 
-    def on_output(self, target, msg):
+    def on_output(self, msg):
         with self.cond:
-            self.latest[target] = msg
+            self.latest = msg
             self.cond.notify_all()
 
-    def wait_output(self, target, stamp):
+    def wait_output(self, stamp):
         """The FoundationPose result for the frame with this stamp (it may answer an older request first)."""
         want = stamp_sec(stamp)
         with self.cond:
-            ok = self.cond.wait_for(lambda: target in self.latest and
-                                    stamp_sec(self.latest[target].header.stamp) >= want - 1e-6, self.timeout)
-            return self.latest[target] if ok else None
+            ok = self.cond.wait_for(lambda: self.latest is not None and
+                                    stamp_sec(self.latest.header.stamp) >= want - 1e-6, self.timeout)
+            return self.latest if ok else None
+
+    def load_mesh(self, target):
+        """Point FoundationPose at the target's mesh; it reloads it when the parameter changes."""
+        path = mesh_path(target)
+        if path == self.mesh:
+            return
+        r = call(self, self.set_fp_params, SetParameters.Request(
+            parameters=[Parameter('mesh_file_path', value=path).to_parameter_msg()]), timeout=10.0)
+        if not r.results[0].successful:
+            raise RuntimeError(r.results[0].reason or 'rejected')
+        self.mesh = path
+        self.get_logger().info('FoundationPose mesh: %s' % target)
 
     def on_request(self, req, res):
         if req.target not in self.targets:
-            res.message = 'no FoundationPose instance for "%s"' % req.target
+            res.message = 'no mesh for "%s" (have: %s)' % (req.target, ', '.join(self.targets))
+            return res
+        with self.busy:
+            return self.estimate(req, res)
+
+    def estimate(self, req, res):
+        try:
+            self.load_mesh(req.target)
+        except Exception as e:  # noqa: BLE001
+            self.mesh = None
+            res.message = 'could not load the mesh into FoundationPose: %s' % e
             return res
         try:
             det = call(self, self.detect, Detect.Request(target=req.target, publish_for_pose=True))
@@ -65,7 +93,7 @@ class PoseNode(Node):
         if not det.found:
             res.message = 'not detected: ' + det.message
             return res
-        out = self.wait_output(req.target, det.stamp)
+        out = self.wait_output(det.stamp)
         if out is None or not out.detections:
             res.message = 'no FoundationPose result within %.0f s' % self.timeout
             return res

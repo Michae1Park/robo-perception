@@ -13,8 +13,9 @@ Workstation, one terminal each (Jazzy is sourced by `.bashrc`).
 |---|---|---|
 | 1 | Sim, live over ROS | `.venv-sim/bin/python sim/ros_cell.py` (wait for `[ros_cell] running`) |
 | 2 | Robot, MoveIt, perception (+ FoundationPose container) | `source ros2/install/setup.bash && ros2 launch ppp_bringup all.launch.py eval:=true` |
-| 3 | The task: mustard → shelf, tomato can → shelf | `source ros2/install/setup.bash && ros2 launch ppp_bringup task.launch.py` |
+| 3 | The task: every object in `config.yaml objects` → shelf | `source ros2/install/setup.bash && ros2 launch ppp_bringup task.launch.py` |
 | — | One target | `ros2 launch ppp_bringup task.launch.py targets:='[tomato_soup_can]'` |
+| 3′ | Or prompt it from a web page (instead of step 3) | `source ros2/install/setup.bash && .venv/bin/python ui/prompt_ui.py` → `http://localhost:8088` ([Prompt UI](#prompt-ui)) |
 | — | New object yaws | `ros2 service call /sim/reset std_srvs/srv/Trigger` |
 | — | Where things ended up (ground truth) | `ros2 service call /eval_node/report std_srvs/srv/Trigger` |
 | — | N randomised episodes | `.venv/bin/python sim/episodes.py -n 10` → `output/episodes.json` |
@@ -48,7 +49,7 @@ Isaac Sim (sim/ros_cell.py) ──RGB-D, /clock, /joint_states──►  ros2_co
 MoveIt 2 (move_group, pick_ik) ◄── task_manager (BehaviorTree.CPP) ──┘
                                    │  EstimatePose   PlanGrasps   GetPlacements
                                    ▼
-   pose_node ─► detect_node (YOLOE) ─► /ppp/fp/<target>/* ─► FoundationPose ×2 (Isaac ROS, Docker)
+   pose_node ─► detect_node (YOLOE) ─► /ppp/fp/* ─► FoundationPose ×1, mesh per request (Isaac ROS, Docker)
    grasp_node ─► spatial_node (C++, ppp_geometry RANSAC)
    place_node (C++ RANSAC via pybind11)                          eval_node ◄── /sim/gt/*  (evaluation only)
 ```
@@ -69,8 +70,10 @@ MoveIt 2 (move_group, pick_ik) ◄── task_manager (BehaviorTree.CPP) ──�
 | `/camera/camera/color/image_raw`, `.../aligned_depth_to_color/image_raw` (16UC1 mm), `.../camera_info` | Image | sim → detect, spatial |
 | `/wrist_camera/camera/...` | Image | sim → place |
 | `/detect_node/detect` | Detect | pose_node → detect |
-| `/ppp/fp/<target>/{image, depth_image (32FC1 m), camera_info, segmentation}` | Image | detect → FoundationPose |
-| `/ppp/fp/<target>/output` | Detection3DArray | FoundationPose → pose_node |
+| `/detect_node/set_prompt` | SetPrompt | prompt UI → detect |
+| `/ppp/fp/{image, depth_image (32FC1 m), camera_info, segmentation}` | Image | detect → FoundationPose |
+| `/ppp/fp/output` | Detection3DArray | FoundationPose → pose_node |
+| `/ppp/fp/foundationpose` `mesh_file_path` | parameter | pose_node → FoundationPose (the target's mesh, D-043) |
 | `/pose_node/estimate_pose` | EstimatePose | task → pose |
 | `/spatial_node/analyze_table` | AnalyzeTable | grasp → spatial |
 | `/grasp_node/plan_grasps` | PlanGrasps | task → grasp |
@@ -114,6 +117,28 @@ every 5 mm.
 `panda_hand` as a MoveIt `AttachedCollisionObject`. Every IK, plan and collision check then includes it, against the
 shelf, the clutter voxels and the robot itself: the dynamic equivalent of adding it to the URDF.
 
+## Prompt UI
+
+`ui/prompt_ui.py` serves one page (port 8088; Cursor forwards it to the laptop, or `http://192.168.33.118:8088`):
+type a phrase or give an example image (drop one, or pick a sample from `assets/prompts/`; drag a box around the
+object), press **Pick it up**, and watch the fixed and wrist cameras, what `detect_node` saw, the task's steps and its log.
+
+| Step | What happens |
+|---|---|
+| 1 · Which object | `detect_node ~/set_prompt` runs the prompt on the live frame: a text prompt as YOLOE text classes, an example image as a visual prompt, tried as given and padded to two object sizes (`pad_prompt`), best match kept. Its best detection is the object meant |
+| 2 · What it is | The robot's library (per target: the stored example image + text check of `Detect`, and the mesh FoundationPose needs) finds each target; the one whose mask overlaps the prompt's (IoU > 0.5) is it. None: "not one I know" ([D-042](DECISIONS.md#d-042)) |
+| 3 · The task | `task.launch.py targets:=[<target>]`. Its `Detect` runs the prompt again and sends the prompt's mask to FoundationPose |
+
+| Prompt (sim, pantry cell) | Result |
+|---|---|
+| "the yellow bottle", "the mustard" | mustard bottle (0.91, 0.05) |
+| "the red can", "red and white can" | tomato can (0.24, 0.50) |
+| "the rubik's cube" | a block, not one I know |
+| "tomato soup can", "a banana", "brick" | nothing matches (the lying can isn't found by its name) |
+| Example images `assets/prompts/`: mustard, tomato can | mustard (0.63), tomato can (0.58); as given, without padding: 0.37 and nothing |
+| Example images: sugar box, foam brick / Rubik's cube | a box, not one I know / nothing matches |
+| Full runs from the page | tomato can from its image 2/2 placed; mustard from "the yellow bottle" 1/2 (the miss: execution failed on both lying-down placements, with the can already on the 0.45 board) |
+
 ## Measured (sim, L40S)
 
 | What | Result |
@@ -130,10 +155,11 @@ shelf, the clutter voxels and the robot itself: the dynamic equivalent of adding
 
 | Path | What |
 |---|---|
+| `ui/prompt_ui.py`, `ui/index.html` | Prompt UI: web server (stdlib `http.server` + rclpy) and the page |
 | `sim/ros_cell.py` | Isaac Sim over ROS 2 (cameras, clock, ros2_control, ground truth, reset, viewport overlay) |
 | `sim/cell.py` | Scene building shared with `sim/scene.py` |
 | `sim/write_calibration.py` | Camera extrinsics file (ground-truth stand-in) |
 | `sim/episodes.py` | Randomised episodes, success judged on ground truth |
-| `docker/Dockerfile.isaac_ros`, `docker/foundationpose.sh` | Isaac ROS 4.5 FoundationPose image and start script |
+| `docker/Dockerfile.isaac_ros`, `docker/foundationpose.sh`, `docker/fp_run.sh` | Isaac ROS 4.5 FoundationPose image, start script (host), start inside the container |
 | `ros2/build.sh` | colcon build with the right pybind11 |
 | `ros2/src/ppp_bringup/config/` | `ros2_controllers.yaml`, `calibration.yaml` |

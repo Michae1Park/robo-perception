@@ -29,6 +29,23 @@ def load_prompt(image_path):
         return cv2.imread(image_path), [float(v) for v in json.load(f)['bbox']]
 
 
+def pad_prompt(img, bbox, size, canvas=(480, 640)):
+    """A tight example crop -> the object `size` px across, centred on a canvas of the crop's border colour.
+    YOLOE pools the prompt's features at its own scale: an object that fills the whole prompt image matches objects
+    that fill the scene, not ones 50-100 px across."""
+    import cv2
+    h, w = img.shape[:2]
+    s = size / max(bbox[2] - bbox[0], bbox[3] - bbox[1])
+    img = cv2.resize(img, (max(1, int(w * s)), max(1, int(h * s))))
+    fill = np.median(np.concatenate([img[0], img[-1], img[:, 0], img[:, -1]]), axis=0)
+    ch, cw = max(canvas[0], img.shape[0]), max(canvas[1], img.shape[1])
+    out = np.empty((ch, cw, 3), np.uint8)
+    out[:] = fill
+    y, x = (ch - img.shape[0]) // 2, (cw - img.shape[1]) // 2
+    out[y:y + img.shape[0], x:x + img.shape[1]] = img
+    return out, [bbox[0] * s + x, bbox[1] * s + y, bbox[2] * s + x, bbox[3] * s + y]
+
+
 def build_visual_prompt_model(weights, prompts, device='cuda:0'):
     """prompts: list of (name, bgr_image, bbox). Returns a YOLOE model whose classes are the names."""
     import torch

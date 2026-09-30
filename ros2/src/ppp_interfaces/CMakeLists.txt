@@ -15,6 +15,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   srv/AnalyzeTable.srv
   srv/PlanGrasps.srv
   srv/GetPlacements.srv
+  srv/SetPrompt.srv
   DEPENDENCIES builtin_interfaces geometry_msgs nav_msgs sensor_msgs)
 
 ament_export_dependencies(rosidl_default_runtime)

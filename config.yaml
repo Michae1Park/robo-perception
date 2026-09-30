@@ -37,9 +37,13 @@ robot:                        # Franka Panda joint poses (rad), used by the task
   home_joints: [-0.785, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
   look_joints: [-1.257, -0.88, 0.217, -1.445, -0.143, 1.164, 1.193]   # wrist camera at (0.12, -0.12, 0.90) looking at (0.12, -0.64, 0.22)
 
-objects:                      # what the pipeline knows about an object besides its mesh (assets/ycb/<name>)
+objects:                      # the objects the robot can pick (its mesh: assets/ycb/<name>) and what else it knows about them
+  006_mustard_bottle: {}
   005_tomato_soup_can:
     symmetry_axis: z          # rotationally symmetric about its mesh z axis: its estimated roll about it is arbitrary
+  077_rubiks_cube: {}
+  004_sugar_box: {}
+  061_foam_brick: {}
 
 grasp:                        # stage 4 filter
   max_approach_tilt_deg: 50   # approach direction vs. straight down
@@ -72,9 +76,9 @@ sim:                          # Isaac Sim cell (sim/cell.py). World frame = robo
                               # tilt_deg 90 = lying on its side; target: true -> mask + ground-truth pose saved (demo picks)
     - {name: 006_mustard_bottle,  xy: [0.54,  0.08], yaw_deg: [-30, 30], target: true}
     - {name: 005_tomato_soup_can, xy: [0.62, -0.13], yaw_deg: [-180, 180], tilt_deg: 90, target: true}
-    - {name: 077_rubiks_cube,     xy: [0.70,  0.18], yaw_deg: 15}
-    - {name: 004_sugar_box,       xy: [0.56,  0.34], yaw_deg: 20}
-    - {name: 061_foam_brick,      xy: [0.70,  0.48], yaw_deg: 45}
+    - {name: 077_rubiks_cube,     xy: [0.70,  0.18], yaw_deg: 15, target: true}
+    - {name: 004_sugar_box,       xy: [0.56,  0.34], yaw_deg: 20, target: true}
+    - {name: 061_foam_brick,      xy: [0.45,  0.45], yaw_deg: 45, target: true}
   shelf:                      # metal pantry on the robot's right (-y): corner posts + boards, open back and sides
     center_xy: [0.12, -0.645] # footprint centre: front 0.47 m from the base, back 0.82 m; 0.17 m clear of the table
     size: [0.80, 0.35]        # width (along x), depth (along y)

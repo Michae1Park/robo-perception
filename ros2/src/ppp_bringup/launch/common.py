@@ -12,13 +12,15 @@ sys.path.insert(0, REPO)
 from vision.grasp import FINGER_BASE, STOCK_TCP, tcp_offset  # noqa: E402
 
 VENV_PY = os.path.join(REPO, '.venv', 'bin', 'python')
-TARGETS = ['mustard_bottle', 'tomato_soup_can']
 STOCK_TIP = STOCK_TCP + 0.0089 - FINGER_BASE   # finger tip in the finger link frame (53.9 mm)
 
 
 def config():
     with open(os.path.join(REPO, 'config.yaml')) as f:
         return yaml.safe_load(f)
+
+
+TARGETS = [n.split('_', 1)[1] for n in config()['objects']]   # what the robot can pick: '006_mustard_bottle' -> 'mustard_bottle'
 
 
 def long_fingers(urdf, length):

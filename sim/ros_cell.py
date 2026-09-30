@@ -5,6 +5,7 @@ evaluation only (D-010). Same scene as scene.py (sim/cell.py), but it keeps runn
   .venv-sim/bin/python sim/ros_cell.py                 # re-runs itself with /opt/ros/jazzy sourced
   .venv-sim/bin/python sim/ros_cell.py --seed 3 --rtf 0   # other object yaws; as fast as possible
   .venv-sim/bin/python sim/ros_cell.py --livestream    # also stream the viewport to the WebRTC client (D-032)
+  .venv-sim/bin/python sim/ros_cell.py --livestream --overlay   # + draw pose estimates (D-034; the cameras see it too)
 
 Published (pipeline-facing, RealSense-style names; depth 16UC1 mm, aligned to colour):
   /camera/camera/color/image_raw, .../color/camera_info,
@@ -43,6 +44,9 @@ ap.add_argument('--rtf', type=float, default=1.0, help='real-time factor cap (0 
 ap.add_argument('--camera-hz', type=float, default=10.0, help='camera publish rate (sim time)')
 ap.add_argument('--livestream', action='store_true',
                 help='also stream the viewport to the Isaac Sim WebRTC Streaming Client (D-032)')
+ap.add_argument('--overlay', action='store_true',
+                help='draw pose estimates and placements in the scene (D-034). The cameras see the lines too, which '
+                     'can spoil detections (I-038): for watching and recording only')
 args = ap.parse_args()
 
 os.environ.setdefault('OMNI_KIT_ACCEPT_EULA', 'YES')
@@ -334,7 +338,7 @@ def main():
     gt_cam = node.create_publisher(PoseStamped, '/sim/gt/camera_pose', 5)
     gt_wrist = node.create_publisher(PoseStamped, '/sim/gt/wrist_camera_pose', 5)
 
-    overlay = PoseOverlay(node, targets)
+    overlay = PoseOverlay(node, targets) if args.overlay else None
     rng = np.random.default_rng(args.seed)
     reset_robot(world, franka, full['robot']['home_joints'])
     drop_all(objects, rng)
@@ -367,7 +371,8 @@ def main():
                 reset_requested.clear()
                 yaws = drop_all(objects, rng)
                 place_on_shelf(shelf_objects, cfg['shelf'])
-                overlay.clear()
+                if overlay:
+                    overlay.clear()
                 print('[ros_cell] reset: ' + ', '.join('%s %.0f deg' % (ros_name(n), yaws[n]) for n, _ in targets),
                       flush=True)
             t = world.current_time

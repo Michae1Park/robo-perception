@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt the Robot</title>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #171b21; --line: #2a3039; --text: #e8ebef; --muted: #8b95a3;
+    --accent: #e040fb; --ok: #3ecf8e; --warn: #ffb020; --bad: #ff5c5c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: baseline; gap: 14px; padding: 16px 22px 6px; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: .2px; }
+  header span { color: var(--muted); font-size: 13px; }
+  main { display: grid; grid-template-columns: 400px 1fr; gap: 16px; padding: 12px 22px 22px; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .panel h2 { margin: 0 0 12px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tabs button { flex: 1; }
+  button { background: #222832; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px;
+           font: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: #4a5260; }
+  button.on { background: #2b2240; border-color: var(--accent); }
+  button.go { width: 100%; margin-top: 14px; padding: 13px; font-size: 16px; font-weight: 650; background: var(--accent);
+              border: none; color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  input[type=text] { width: 100%; padding: 12px 14px; font: inherit; font-size: 17px; color: var(--text);
+                     background: #0f1216; border: 1px solid var(--line); border-radius: 8px; outline: none; }
+  input[type=text]:focus { border-color: var(--accent); }
+  .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chips button { padding: 5px 10px; font-size: 13px; border-radius: 999px; }
+  #drop { position: relative; border: 1.5px dashed var(--line); border-radius: 10px; min-height: 220px; display: flex;
+          align-items: center; justify-content: center; color: var(--muted); text-align: center; overflow: hidden; background: #0f1216; }
+  #drop.over { border-color: var(--accent); }
+  #drop canvas { max-width: 100%; max-height: 300px; cursor: crosshair; display: none; }
+  .thumbs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 10px; }
+  .thumbs img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #0f1216; border: 1px solid var(--line);
+                border-radius: 6px; cursor: pointer; padding: 3px; }
+  .thumbs img:hover { border-color: var(--accent); }
+  #result { margin-top: 14px; padding: 12px 14px; border-radius: 8px; background: #0f1216; border-left: 3px solid var(--line);
+            display: none; }
+  #result b { font-size: 16px; }
+  #result.ok { border-color: var(--ok); } #result.warn { border-color: var(--warn); } #result.bad { border-color: var(--bad); }
+  #result small { display: block; color: var(--muted); margin-top: 4px; }
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  .row button { flex: 1; font-size: 13px; }
+  .views { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 1500px) { .views { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 1100px) { .views { grid-template-columns: 1fr; } }
+  .view img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: #000; border-radius: 8px; display: block; }
+  .prompt-now { display: flex; align-items: center; gap: 12px; min-height: 64px; }
+  .prompt-now img { height: 64px; border-radius: 6px; background: #0f1216; }
+  .prompt-now q { font-size: 22px; font-weight: 600; }
+  .prompt-now .arrow { color: var(--muted); font-size: 22px; }
+  .prompt-now .tgt { font-size: 18px; font-weight: 650; color: var(--accent); }
+  .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 14px; }
+  .step { padding: 10px 8px; border-radius: 8px; border: 1px solid var(--line); text-align: center; font-size: 14px; color: var(--muted); }
+  .step.done { border-color: var(--ok); color: var(--ok); }
+  .step.now { border-color: var(--accent); color: var(--text); animation: pulse 1.2s ease-in-out infinite; }
+  .step.fail { border-color: var(--bad); color: var(--bad); }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 3px #e040fb33; } }
+  #log { margin-top: 14px; height: 170px; overflow-y: auto; font: 12px/1.5 ui-monospace, "Cascadia Mono", Menlo, monospace;
+         color: #b9c1cc; background: #0f1216; border-radius: 8px; padding: 10px; white-space: pre-wrap; }
+  #log .f { color: var(--bad); }
+</style>
+</head>
+<body>
+<header><h1>Prompt the robot</h1><span>Say or show what to pick. It goes on the shelf.</span></header>
+<main>
+  <section class="panel">
+    <h2>Prompt</h2>
+    <div class="tabs"><button id="tab-text" class="on">Text</button><button id="tab-image">Image</button></div>
+
+    <div id="pane-text">
+      <input id="text" type="text" placeholder="e.g. the yellow bottle" autocomplete="off">
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <div id="pane-image" hidden>
+      <div id="drop"><span id="drop-msg">Drop an example image here, click to choose one,<br>or pick a sample below</span>
+        <canvas id="canvas"></canvas></div>
+      <p class="hint">Drag on the image to box the object (default: the whole image).</p>
+      <input id="file" type="file" accept="image/*" hidden>
+      <div class="thumbs" id="thumbs"></div>
+    </div>
+
+    <button class="go" id="go">Pick it up</button>
+    <div id="result"></div>
+    <div class="row">
+      <button id="stop" disabled>Stop</button>
+      <button id="reset">Reset scene</button>
+      <button id="clear">Forget prompts</button>
+    </div>
+  </section>
+
+  <section style="display:grid; gap:16px; align-content:start">
+    <div class="panel">
+      <h2>Current task</h2>
+      <div class="prompt-now" id="now"><span class="hint" style="margin:0">No prompt yet</span></div>
+      <div class="steps" id="steps"></div>
+      <div id="log"></div>
+    </div>
+    <div class="views">
+      <div class="panel view"><h2>Fixed camera (live)</h2><img src="/stream/live" alt="fixed camera"></div>
+      <div class="panel view"><h2>Wrist camera (live)</h2><img src="/stream/wrist" alt="wrist camera"></div>
+      <div class="panel view"><h2>What the robot saw</h2><img src="/stream/overlay" alt="latest detection"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let mode = 'text', img = null, box = null, lastPrompt = null;
+
+// ---- tabs
+function setMode(m) {
+  mode = m;
+  $('tab-text').classList.toggle('on', m === 'text');
+  $('tab-image').classList.toggle('on', m === 'image');
+  $('pane-text').hidden = m !== 'text';
+  $('pane-image').hidden = m !== 'image';
+}
+$('tab-text').onclick = () => setMode('text');
+$('tab-image').onclick = () => setMode('image');
+
+// ---- text
+['the yellow bottle', 'the red and white can', 'the red can', 'the rubik\'s cube'].forEach((t) => {
+  const b = document.createElement('button');
+  b.textContent = t;
+  b.onclick = () => { $('text').value = t; $('text').focus(); };
+  $('chips').appendChild(b);
+});
+$('text').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+
+// ---- image: load, show on the canvas, drag a box (in image pixels)
+const canvas = $('canvas'), ctx = canvas.getContext('2d');
+function loadImage(src, bbox) {
+  const im = new Image();
+  im.onload = () => {
+    img = im;
+    canvas.width = im.naturalWidth; canvas.height = im.naturalHeight;
+    box = bbox ? bbox.slice() : null;
+    canvas.style.display = 'block'; $('drop-msg').style.display = 'none';
+    draw();
+  };
+  im.src = src;
+}
+function draw() {
+  ctx.drawImage(img, 0, 0);
+  if (!box) return;
+  const [x0, y0, x1, y1] = box;
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0);
+  ctx.strokeStyle = '#e040fb'; ctx.lineWidth = Math.max(2, canvas.width / 150);
+  ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+}
+function toImg(e) {
+  const r = canvas.getBoundingClientRect();
+  return [(e.clientX - r.left) * canvas.width / r.width, (e.clientY - r.top) * canvas.height / r.height];
+}
+let dragFrom = null;
+canvas.addEventListener('pointerdown', (e) => { dragFrom = toImg(e); canvas.setPointerCapture(e.pointerId); e.stopPropagation(); });
+canvas.addEventListener('pointermove', (e) => {
+  if (!dragFrom) return;
+  const p = toImg(e);
+  box = [Math.min(dragFrom[0], p[0]), Math.min(dragFrom[1], p[1]), Math.max(dragFrom[0], p[0]), Math.max(dragFrom[1], p[1])];
+  draw();
+});
+canvas.addEventListener('pointerup', () => {
+  dragFrom = null;
+  if (box && (box[2] - box[0] < 5 || box[3] - box[1] < 5)) { box = null; draw(); }   // a click: whole image
+});
+canvas.addEventListener('click', (e) => e.stopPropagation());
+$('drop').onclick = () => $('file').click();
+$('file').onchange = () => { if ($('file').files[0]) readFile($('file').files[0]); };
+function readFile(f) { const r = new FileReader(); r.onload = () => loadImage(r.result, null); r.readAsDataURL(f); }
+$('drop').addEventListener('dragover', (e) => { e.preventDefault(); $('drop').classList.add('over'); });
+$('drop').addEventListener('dragleave', () => $('drop').classList.remove('over'));
+$('drop').addEventListener('drop', (e) => {
+  e.preventDefault(); $('drop').classList.remove('over');
+  if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
+});
+fetch('/api/samples').then((r) => r.json()).then((list) => list.forEach((s) => {
+  const t = document.createElement('img');
+  t.src = s.url; t.title = s.name; t.alt = s.name;
+  t.onclick = () => loadImage(s.url, s.bbox);
+  $('thumbs').appendChild(t);
+}));
+function imageDataURL() {   // the original pixels (not the dimmed canvas)
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  c.getContext('2d').drawImage(img, 0, 0);
+  return c.toDataURL('image/png');
+}
+
+// ---- prompt -> detect_node -> task
+function showResult(cls, html) { const r = $('result'); r.className = cls; r.innerHTML = html; r.style.display = 'block'; }
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+async function post(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+async function go() {
+  let body;
+  if (mode === 'text') {
+    const t = $('text').value.trim();
+    if (!t) return showResult('bad', 'Type what to pick.');
+    body = { text: t };
+    lastPrompt = { text: t };
+  } else {
+    if (!img) return showResult('bad', 'Choose an example image first.');
+    body = { image: imageDataURL(), bbox: box ? box.map(Math.round) : null };
+    lastPrompt = { thumb: thumbURL() };
+    body.thumb = lastPrompt.thumb;
+  }
+  $('go').disabled = true;
+  showResult('', 'Looking for it…');
+  try {
+    const r = await post('/api/prompt', body);
+    if (!r.found) showResult('bad', `<b>Not found</b><small>${esc(r.message)}</small>`);
+    else if (!r.target) showResult('warn', `<b>That looks like a ${esc(r.label)}</b><small>Not something I can pick. ${esc(r.message)}</small>`);
+    else showResult('ok', `<b>Found: ${esc(r.target.replace(/_/g, ' '))}</b><small>${esc(r.message)}</small>`);
+    renderNow(r.target || null);
+  } catch (e) {
+    showResult('bad', `<b>Error</b><small>${esc(e.message)}</small>`);
+  }
+  poll();
+}
+function thumbURL() {   // the boxed part (or the whole image), at most 128 px: shown as "the prompt"
+  const [x0, y0, x1, y1] = box || [0, 0, img.naturalWidth, img.naturalHeight];
+  const k = Math.min(1, 128 / Math.max(x1 - x0, y1 - y0)), c = document.createElement('canvas');
+  c.width = Math.round((x1 - x0) * k); c.height = Math.round((y1 - y0) * k);
+  c.getContext('2d').drawImage(img, x0, y0, x1 - x0, y1 - y0, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.9);
+}
+function renderNow(target) {
+  if (!lastPrompt) return;
+  nowTarget = target;
+  const p = lastPrompt.text ? `<q>${esc(lastPrompt.text)}</q>` : `<img src="${lastPrompt.thumb}" alt="prompt">`;
+  const t = target ? `<span class="tgt">${esc(target.replace(/_/g, ' '))}</span>` : '<span class="hint" style="margin:0">no target</span>';
+  $('now').innerHTML = `${p}<span class="arrow">→</span>${t}`;
+}
+$('go').onclick = go;
+$('stop').onclick = () => post('/api/stop').catch((e) => showResult('bad', esc(e.message)));
+$('reset').onclick = async () => {
+  try { const r = await post('/api/reset'); showResult(r.ok ? 'ok' : 'bad', `<b>Scene reset</b><small>${esc(r.message)}</small>`); }
+  catch (e) { showResult('bad', `<b>Reset failed</b><small>${esc(e.message)}</small>`); }
+};
+$('clear').onclick = async () => {
+  try { const r = await post('/api/clear'); showResult('ok', `<small>${esc(r.message)}</small>`); }
+  catch (e) { showResult('bad', `<b>Error</b><small>${esc(e.message)}</small>`); }
+};
+
+// ---- task status
+let timer = null, nowTarget;
+function renderStatus(s) {
+  if (!lastPrompt && s.prompt) lastPrompt = s.prompt.text ? { text: s.prompt.text } : { thumb: s.prompt.thumb };
+  if (s.target && s.target !== nowTarget) renderNow(s.target);
+  $('steps').innerHTML = s.steps.map((name, i) => {
+    let c = 'step';
+    if (i <= s.done) c += ' done';
+    else if (i === s.done + 1 && s.running) c += ' now';
+    else if (i === s.done + 1 && s.failed) c += ' fail';
+    return `<div class="${c}">${name}</div>`;
+  }).join('');
+  const atBottom = $('log').scrollHeight - $('log').scrollTop - $('log').clientHeight < 30;
+  $('log').innerHTML = s.log.map((l) => `<div${/FAILURE|FAILED/.test(l) ? ' class="f"' : ''}>${esc(l)}</div>`).join('')
+    + (s.result ? `<div><b>${esc(s.result)}</b></div>` : '');
+  if (atBottom) $('log').scrollTop = $('log').scrollHeight;
+  $('go').disabled = s.running;
+  $('stop').disabled = !s.running;
+  $('reset').disabled = s.running;
+}
+async function poll() {
+  clearTimeout(timer);
+  try {
+    const s = await (await fetch('/api/status')).json();
+    renderStatus(s);
+    if (s.running) timer = setTimeout(poll, 400);
+  } catch (e) { timer = setTimeout(poll, 2000); }
+}
+poll();
+</script>
+</body>
+</html>
