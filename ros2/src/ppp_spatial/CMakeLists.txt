@@ -1,0 +1,23 @@
+cmake_minimum_required(VERSION 3.8)
+project(ppp_spatial)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+set(CMAKE_CXX_STANDARD 17)
+add_compile_options(-Wall -Wextra -Wpedantic)
+
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_eigen REQUIRED)
+find_package(ppp_interfaces REQUIRED)
+find_package(ppp_geometry REQUIRED)
+
+add_executable(spatial_node src/spatial_node.cpp)
+target_link_libraries(spatial_node ppp_geometry::ppp_geometry rclcpp::rclcpp tf2_ros::tf2_ros tf2_eigen::tf2_eigen
+  ${sensor_msgs_TARGETS} ${nav_msgs_TARGETS} ${geometry_msgs_TARGETS} ${ppp_interfaces_TARGETS})
+install(TARGETS spatial_node DESTINATION lib/${PROJECT_NAME})
+ament_package()

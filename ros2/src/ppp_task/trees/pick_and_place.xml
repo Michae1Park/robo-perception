@@ -1,0 +1,123 @@
+<?xml version="1.0"?>
+<!-- Pick-and-place from a prompt (D-014, D-020). task_manager ticks PickAndPlace once per target, with {target}
+     set on the blackboard, and Recover after a failure. Every pose is a TCP pose (fingertips; +z = approach) in
+     panda_link0. View / edit with Groot2.
+
+     Look before you pick: the grasp has to suit the place as well (a top-down grasp can't put a tall bottle into
+     a shelf), so the shelf is looked at first and a grasp + placement pair is chosen together (SelectPlans).
+     How it goes down: stage 5 offers placements for every stable rest pose of the object, upright first, so a can
+     lying on the table is stood up, and a bottle too tall for the free space is laid on its side. -->
+<root BTCPP_format="4">
+
+  <BehaviorTree ID="PickAndPlace">
+    <Sequence>
+      <MoveToJoints pose="home"/>
+      <Gripper position="0.04"/>
+      <SubTree ID="Perceive" target="{target}" plans="{plans}"/>
+      <SubTree ID="Pick" target="{target}" plans="{plans}" grasp="{grasp}" preplace="{preplace}" place="{place}"
+               depart="{depart}" pregrasp="{pregrasp}" grasp_pose="{grasp_pose}" lifted="{lifted}"/>
+      <SubTree ID="Place" target="{target}" plans="{plans}" grasp="{grasp}" preplace="{preplace}" place="{place}"
+               depart="{depart}"/>
+      <MoveToJoints pose="home"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Fixed camera: object (stage 1 + 2) and grasps (3 + 4). Wrist camera: where it fits on the shelf (5).
+       Then: which grasp + placement pairs can the arm actually reach, collision-free. -->
+  <BehaviorTree ID="Perceive">
+    <Sequence>
+      <EstimatePose target="{target}" object_pose="{object_pose}"/>
+      <PlanGrasps target="{target}" object_pose="{object_pose}" grasps="{grasps}" obstacles="{obstacles}"/>
+      <UpdateScene obstacles="{obstacles}" id="table_clutter"/>
+      <MoveToJoints pose="look"/>
+      <GetPlacements target="{target}" object_pose="{object_pose}" placements="{placements}"
+                     obstacles="{shelf_obstacles}"/>
+      <UpdateScene obstacles="{shelf_obstacles}" id="shelf_clutter"/>
+      <SelectPlans target="{target}" object_pose="{object_pose}" grasps="{grasps}" placements="{placements}"
+                   plans="{plans}"/>
+      <AddTarget target="{target}" object_pose="{object_pose}"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Reach the grasp of the best plan that works; close; check something is in the hand; lift. -->
+  <BehaviorTree ID="Pick">
+    <Sequence>
+      <RetryUntilSuccessful num_attempts="8">
+        <Sequence>
+          <PopPlan plans="{plans}" grasp="{grasp}" pregrasp="{pregrasp}" grasp_pose="{grasp_pose}"
+                   lifted="{lifted}" preplace="{preplace}" place="{place}" depart="{depart}"/>
+          <MoveToPose pose="{pregrasp}"/>
+          <RemoveTarget target="{target}"/>   <!-- the fingers go around it now -->
+          <MoveLinear pose="{grasp_pose}"/>
+        </Sequence>
+      </RetryUntilSuccessful>
+      <Fallback>
+        <Sequence>
+          <Gripper position="0.0" max_effort="70"/>
+          <CheckGrasp width="{held_width}"/>
+        </Sequence>
+        <ForceFailure>   <!-- closed on nothing: let go and back off -->
+          <Sequence>
+            <Gripper position="0.04"/>
+            <MoveLinear pose="{pregrasp}" min_fraction="0.9"/>
+          </Sequence>
+        </ForceFailure>
+      </Fallback>
+      <MoveLinear pose="{lifted}" min_fraction="0.9"/>
+      <CheckGrasp width="{held_width}"/>   <!-- still in the hand after the lift? -->
+      <AttachObject target="{target}" grasp="{grasp}"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Into the chosen placement (or another one that suits the grasp in hand), release, back out. -->
+  <BehaviorTree ID="Place">
+    <Sequence>
+      <Fallback>
+        <Sequence>
+          <MoveToPose pose="{preplace}"/>
+          <MoveLinear pose="{place}"/>
+        </Sequence>
+        <RetryUntilSuccessful num_attempts="6">
+          <Sequence>
+            <PopPlan plans="{plans}" same_grasp="true" grasp="{grasp}" pregrasp="{unused_pregrasp}"
+                     grasp_pose="{unused_grasp_pose}" lifted="{unused_lifted}" preplace="{preplace}" place="{place}"
+                     depart="{depart}"/>
+            <MoveToPose pose="{preplace}"/>
+            <MoveLinear pose="{place}"/>
+          </Sequence>
+        </RetryUntilSuccessful>
+      </Fallback>
+      <CheckGrasp width="{held_width}"/>   <!-- dropped on the way? then this is not a placement -->
+      <Gripper position="0.04"/>
+      <DetachObject target="{target}"/>
+      <!-- off along the gripper axis first, as far as it goes (near the reach limit maybe only part way):
+           dragging the open fingers sideways rolls a can off the board -->
+      <ForceSuccess><MoveLinear pose="{depart}" min_fraction="0.3"/></ForceSuccess>
+      <ForceSuccess><MoveLinear pose="{preplace}" min_fraction="0.5"/></ForceSuccess>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- After a failure (same blackboard as PickAndPlace). Never drop the object somewhere random: if it is still in
+       the hand, put it back where it was picked; if that fails too, keep holding it and go home. -->
+  <BehaviorTree ID="Recover">
+    <Fallback>
+      <Sequence>
+        <CheckGrasp width="{held_width}"/>
+        <MoveToPose pose="{lifted}"/>
+        <MoveLinear pose="{grasp_pose}" min_fraction="0.9"/>
+        <Gripper position="0.04"/>
+        <DetachObject target="{target}"/>
+        <ForceSuccess><MoveLinear pose="{pregrasp}" min_fraction="0.5"/></ForceSuccess>
+        <MoveToJoints pose="home"/>
+      </Sequence>
+      <Sequence>
+        <Inverter><CheckGrasp width="{held_width}"/></Inverter>   <!-- hand empty -->
+        <ForceSuccess><Gripper position="0.04"/></ForceSuccess>
+        <ForceSuccess><DetachObject target="{target}"/></ForceSuccess>
+        <MoveToJoints pose="home"/>
+      </Sequence>
+      <MoveToJoints pose="home"/>   <!-- still holding it, couldn't put it back -->
+    </Fallback>
+  </BehaviorTree>
+
+</root>

@@ -1,0 +1,12 @@
+# Stage 5: supports + free space in the latest wrist-camera frame -> where and how the object fits, best first:
+# preferred rest pose first (upright), then most clearance.
+string target
+geometry_msgs/Quaternion object_orientation   # as it stood on the table: used when rest_poses is false
+bool rest_poses                               # try every stable rest pose of the mesh (else only the table one)
+builtin_interfaces/Time not_before            # use a camera frame at least this new (after the arm stopped)
+---
+bool success
+Placement[] placements
+uint32 supports
+sensor_msgs/PointCloud2 obstacles             # what stands on the supports (not a support), base frame
+string message

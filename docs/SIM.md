@@ -9,11 +9,11 @@ so stage 2 can be scored (rotation / translation error). No ROS yet; the ROS 2 b
 | Piece | What |
 |---|---|
 | Table | 0.7 × 0.8 m box in front of the robot (+x), top at world z = 0 |
-| Pick targets | `006_mustard_bottle` (upright) and `005_tomato_soup_can` (**lying on its side**): the two demo picks. Random yaw each frame; each gets its own mask + ground-truth pose. **Same OBJs FoundationPose uses** (`sim/ycb_usd.py` → USD), so ground truth and estimate share one object frame |
+| Pick targets | `006_mustard_bottle` (upright) and `005_tomato_soup_can` (**lying on its side**): the two demo picks. Random yaw each frame (mustard within ±30°, can any); each gets its own mask + ground-truth pose. **Same OBJs FoundationPose uses** (`sim/ycb_usd.py` → USD), so ground truth and estimate share one object frame |
 | Other items | Sugar box, potted meat can, foam brick, Rubik's cube at fixed spots, placed so nothing blocks the camera's view of the targets |
 | Lying can | Rocks ~7 mm onto a flat of its collision hull in the first 2 s, then stays put (checked over 20 s, at every yaw) |
 | Shelf | Open shelf 90° to the robot's right (−y), opening facing the robot. Levels at z = 0 / 0.32 / 0.64 m; every level is 0.6–0.8 m from the shoulder (Franka reach ≈ 0.85 m), so it is the place target for pick-and-place |
-| Robot | Franka Panda (NVIDIA asset), base at the world origin on a pedestal, held in its home pose. Idle for now |
+| Robot | Franka Panda (NVIDIA asset), base at the world origin on a pedestal. `scene.py` holds it in its home pose; `ros_cell.py` drives it through ros2_control ([ROS.md](ROS.md)). Joint drives and finger pads: `sim.arm_drive`, `sim.gripper` |
 | Shelf items | Sugar box + potted meat can on the bottom level, foam brick on the middle one (`shelf_objects`): stage 5 must find the space around them. Deliberately not a pick target, so a prompt never matches a shelf item ([I-014](DECISIONS.md#i-014)) |
 | Wrist camera | Same intrinsics; the NVIDIA **RealSense D455** model mounted flat on the hand's side (colour lens at hand (49.5, −11.5, 66) mm, glass flush with the hand's front, long axis along the fingers' opening), looking along the fingers. Visual only: no rigid body, no colliders. Each frame: table shot at home, then the arm moves to `wrist_camera.look_joints` (IK: camera at (0, −0.05, 0.95) looking into the shelf) and the wrist camera takes the shelf shot → `data/sim/shelf/` |
 | Camera | Pinhole 640×480, fx = fy = 615, front-left of the table (robot's view), 0.5 m above it and ~0.73 m from the bottle, looking 36° down at the table centre. Rendered as a **RealSense D455** (NVIDIA asset) on a ball head + floor tripod; the colour lens sits exactly on the optical centre. The rig is visual only and never appears in the camera's own images |
@@ -111,6 +111,8 @@ The workstation renders and sends a video stream over WebRTC; the laptop only di
 - Ports: TCP 49100 (signalling) + UDP 47998 (video). The workstation firewall is off. The laptop must be on
   the same LAN (or a VPN into it): UDP can't go through the Cursor SSH tunnel.
 - Only one client at a time. Stop the server with Ctrl+C in its terminal.
+- **Live ROS cell:** `.venv-sim/bin/python sim/ros_cell.py --livestream` streams the same way while the ROS pipeline
+  runs. Unlike `scene.py --livestream`, it isn't view-only: the ROS cameras keep publishing (D-032).
 
 ## Knobs
 

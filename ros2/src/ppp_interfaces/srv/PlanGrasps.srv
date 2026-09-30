@@ -1,0 +1,9 @@
+# Stage 4: grasp candidates for a posed object, filtered against the table and the scene, best first.
+string target
+geometry_msgs/PoseStamped object_pose   # from EstimatePose
+---
+bool success
+Grasp[] grasps
+uint32 candidates                       # before filtering
+sensor_msgs/PointCloud2 obstacles       # scene points standing on the table, minus the object's own (base frame)
+string message

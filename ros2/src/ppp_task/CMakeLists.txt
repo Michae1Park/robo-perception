@@ -1,0 +1,31 @@
+cmake_minimum_required(VERSION 3.8)
+project(ppp_task)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+set(CMAKE_CXX_STANDARD 17)
+add_compile_options(-Wall -Wextra -Wno-unused-parameter)
+
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(behaviortree_cpp REQUIRED)
+find_package(moveit_ros_planning_interface REQUIRED)
+find_package(moveit_core REQUIRED)
+find_package(geometric_shapes REQUIRED)
+find_package(control_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(tf2_eigen REQUIRED)
+find_package(ppp_interfaces REQUIRED)
+find_package(ament_index_cpp REQUIRED)
+
+add_executable(task_manager src/task_manager.cpp src/bt_nodes.cpp src/context.cpp)
+target_include_directories(task_manager PRIVATE include)
+target_link_libraries(task_manager behaviortree_cpp::behaviortree_cpp rclcpp::rclcpp rclcpp_action::rclcpp_action
+  moveit_ros_planning_interface::moveit_move_group_interface moveit_ros_planning_interface::moveit_planning_scene_interface
+  moveit_core::moveit_trajectory_processing geometric_shapes::geometric_shapes tf2_eigen::tf2_eigen ament_index_cpp::ament_index_cpp
+  ${control_msgs_TARGETS} ${sensor_msgs_TARGETS} ${geometry_msgs_TARGETS} ${ppp_interfaces_TARGETS})
+install(TARGETS task_manager DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY trees DESTINATION share/${PROJECT_NAME})
+ament_package()

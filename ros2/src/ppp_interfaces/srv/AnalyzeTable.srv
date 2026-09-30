@@ -1,0 +1,9 @@
+# Stage 3: table plane + occupancy from the latest fixed-camera depth (C++ RANSAC, ppp_geometry).
+---
+bool success
+float64[4] plane                      # a b c d in the base frame (normal up): a x + b y + c z + d = 0
+float32 table_z                       # plane height at the table centre
+uint32 inliers
+nav_msgs/OccupancyGrid grid           # table zone: 0 free, 100 occupied, -1 unknown (at table height)
+sensor_msgs/PointCloud2 above_table   # points between height_thresh and max_height above the plane (base frame)
+string message

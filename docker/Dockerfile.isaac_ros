@@ -1,0 +1,19 @@
+# Isaac ROS 4.5 FoundationPose (D-012): NVIDIA's Jazzy base image (CUDA 13.0, TensorRT 10.13, driver 580+) with
+# the apt repo moved from release-4.0 to release-4.5. Installing at build time avoids I-011: the GL/EGL files that
+# clash are only bind-mounted by the NVIDIA runtime in a running container.
+#   docker build -f docker/Dockerfile.isaac_ros -t ppp-isaac-ros:4.5 docker/
+FROM nvcr.io/nvidia/isaac/ros:noble-ros2_jazzy_d3e84470d576702a380478a513fb3fc6-amd64
+
+RUN rm -f /etc/apt/sources.list.d/yarn.list \
+ && sed -i 's#isaac-ros/release-4.0#isaac-ros/release-4.5#' /etc/apt/sources.list.d/nvidia-isaac-ros.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends isaac-ros-cli
+
+# 4.5's pip-shim packages (torch, onnx) only install once the Isaac ROS CLI says which environment this is;
+# NVIDIA's own container layer marks itself "docker-activated" (pip installs into the system Python).
+RUN echo 'ISAAC_ROS_ENVIRONMENT=docker-activated' > /etc/isaac-ros-cli/environment.conf \
+ && apt-get install -y --no-install-recommends ros-jazzy-isaac-ros-foundationpose \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY isaac_ros_entrypoint.sh /usr/local/bin/ppp_entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/ppp_entrypoint.sh"]

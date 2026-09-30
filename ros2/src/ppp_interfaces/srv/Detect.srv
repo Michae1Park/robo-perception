@@ -1,0 +1,10 @@
+# Stage 1: find the prompted object in the latest fixed-camera frame (YOLOE).
+string target            # object name, e.g. "mustard_bottle" (visual prompt: data/.../refs/<ycb name>.png)
+bool publish_for_pose    # also publish the frame + mask on /ppp/fp/<target>/... for FoundationPose (D-016)
+---
+bool found
+float32 score
+float32[4] bbox          # x0 y0 x1 y1 (px)
+uint32 mask_pixels
+builtin_interfaces/Time stamp   # of the camera frame that was used
+string message

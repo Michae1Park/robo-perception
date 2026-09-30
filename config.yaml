@@ -10,6 +10,11 @@ detect:                       # stage 1 (YOLOE) - used by every stage 1 script +
   half: false                 # FP16 inference
   device: cuda:0
 
+  # ROS detect_node, prompt "visual+text": each visual-prompt detection is checked by a text-prompt model with the
+  # target's name plus a generic vocabulary; score = visual + text(target) - text(best other name) on the same mask
+  vocabulary: [can, tin can, box, bottle, cup, bowl, toy, block, cube, fruit, tool, packet]
+  min_fused: -0.25            # below: rejected. 24 sim scenes: 20 accepted, all right; the 4 rejected were all wrong
+
 pose:                         # stage 2 (FoundationPose)
   iterations: 5               # refinement iterations
 
@@ -24,6 +29,10 @@ spatial:                      # stage 3 (table plane + occupancy grid)
 gripper:                      # stage 4 (Franka Panda hand)
   max_opening: 0.08           # total finger opening
   finger_depth: 0.03          # how far fingertips go past the grasped face
+
+objects:                      # what the pipeline knows about an object besides its mesh (assets/ycb/<name>)
+  005_tomato_soup_can:
+    symmetry_axis: z          # rotationally symmetric about its mesh z axis: its estimated roll about it is arbitrary
 
 grasp:                        # stage 4 filter
   max_approach_tilt_deg: 50   # approach direction vs. straight down
@@ -51,7 +60,7 @@ sim:                          # Isaac Sim scene (sim/scene.py). World frame: z u
   table_size: [0.70, 0.80, 0.75]
   objects:                    # YCB items on the table (assets/ycb/<name>). yaw_deg: fixed or [lo, hi] random per frame;
                               # tilt_deg 90 = lying on its side; target: true -> mask + ground-truth pose saved (demo picks)
-    - {name: 006_mustard_bottle,  xy: [0.50,  0.00], yaw_deg: [-180, 180], target: true}
+    - {name: 006_mustard_bottle,  xy: [0.48,  0.03], yaw_deg: [-30, 30], target: true}
     - {name: 005_tomato_soup_can, xy: [0.68, -0.20], yaw_deg: [-180, 180], tilt_deg: 90, target: true}
     - {name: 004_sugar_box,       xy: [0.40, -0.24], yaw_deg: 20}
     - {name: 010_potted_meat_can, xy: [0.33,  0.22], yaw_deg: -30}
@@ -95,5 +104,13 @@ sim:                          # Isaac Sim scene (sim/scene.py). World frame: z u
       leg_angles_deg: [30, 150, 270]   # chosen so no foot lands under the table
       color: [0.08, 0.08, 0.09]
       metal_color: [0.55, 0.56, 0.58]
+  arm_drive:                  # PhysX position drives of panda_joint1-7 (units per degree, as USD stores them)
+    stiffness: 400.0          # N m / deg (the asset's value)
+    damping: 10.0             # N m s / deg (asset: 80, which lags a moving trajectory by centimetres)
+  gripper:                    # Franka Hand finger drive (panda_finger_joint1; joint2 mimics it) + finger-pad friction
+    stiffness: 3000.0         # N/m: squeezes with max_force once the fingers are ~2.5 cm short of their target
+    damping: 100.0
+    max_force: 70.0           # N, the real hand's continuous grasp force (the asset caps it at 7.2 N)
+    friction: 2.0             # static = dynamic, combine mode max: rubber pads
   settle_steps: 120           # physics steps before each capture (object drop + renderer warm-up)
   physics_dt: 0.01666667      # 60 Hz

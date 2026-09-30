@@ -1,0 +1,7 @@
+# Stages 1 + 2: detect the object, then its 6-DoF pose (FoundationPose).
+string target
+---
+bool success
+geometry_msgs/PoseStamped pose   # object frame (= its mesh frame) in the robot base frame
+float32 detection_score
+string message

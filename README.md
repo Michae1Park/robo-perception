@@ -18,15 +18,20 @@ a fixed RealSense D455 over the table, and a wrist-mounted D455 that looks into 
 | 3 | **Table** | Where is the table, and what is free? | RANSAC plane + occupancy grid | ✅ Built |
 | 4 | **Grasp** | How should the gripper take it? | Parallel-jaw candidates + tilt / table / collision filter | ✅ Built |
 | 5 | **Place** | Where on the shelf does it fit? | Sequential RANSAC for horizontal supports + free-space search | ✅ Built |
-| — | **Execute** | Move the robot | ROS 2 Jazzy · MoveIt 2 · BehaviorTree.CPP · ros2_control in Isaac Sim | 🗺️ Planned |
+| — | **Execute** | Move the robot | ROS 2 Jazzy · MoveIt 2 · BehaviorTree.CPP · ros2_control in Isaac Sim | ✅ Built |
 
 ![Stages 1–5 on one scene](docs/pipeline_demo/stages.png)
 
 ```
 fixed camera ─► 1 Detect ─► 2 Pose ──┐
-fixed camera ─► 3 Table ─────────────┴─► 4 Grasp ─► pick
-wrist camera ─► 5 Place ────────────────────────────► place     (the arm first moves to look at the shelf)
+fixed camera ─► 3 Table ─────────────┴─► 4 Grasp ──┐
+wrist camera ─► 5 Place ───────────────────────────┴─► grasp + placement chosen together ─► pick ─► place
+                (the arm looks at the shelf before it picks)
 ```
+
+In ROS 2 each stage is a node (stage 2 is Isaac ROS FoundationPose in Docker, stage 3 and the RANSAC of stage 5 are
+C++); a BehaviorTree.CPP task manager sequences them and moves the Panda through MoveIt 2 and ros2_control running
+inside Isaac Sim. Guide: [docs/ROS.md](docs/ROS.md).
 
 ## Results
 
@@ -61,6 +66,24 @@ python pipeline/interactive_place.py                                # 5 place (n
 .venv-sim/bin/python sim/scene.py                                   # Isaac Sim: RGB-D + ground truth -> data/sim/
 ```
 
+The whole robot, in three terminals (setup: [docs/ROS.md](docs/ROS.md)):
+
+```bash
+.venv-sim/bin/python sim/ros_cell.py                                                  # Isaac Sim over ROS 2
+source ros2/install/setup.bash && ros2 launch ppp_bringup all.launch.py eval:=true    # robot, MoveIt, perception
+source ros2/install/setup.bash && ros2 launch ppp_bringup task.launch.py              # pick both targets -> shelf
+```
+
+To watch from another machine:
+
+| View | How |
+|---|---|
+| **Sim viewport** | Add `--livestream` to step 1, then connect the Isaac Sim WebRTC Streaming Client to the workstation's IP |
+| **ROS data** (detections, planned paths, TF) | Add `foxglove:=true` to step 2, then open `ws://<workstation-ip>:8765` in Foxglove |
+
+Run only one sim at a time: `ros_cell.py` refuses to start if another one is already publishing `/clock`. After
+restarting the sim, restart step 2 as well, since running nodes keep the old sim time.
+
 Full setup (FoundationPose container, Isaac Sim venv): [docs/SIM.md](docs/SIM.md) and the stage guides.
 
 ## Documentation
@@ -73,6 +96,7 @@ Full setup (FoundationPose container, Isaac Sim venv): [docs/SIM.md](docs/SIM.md
 | [Stage 4 — Grasp](docs/STAGE4_GRASP.md) | Candidates, filter, object and gripper poses in every frame |
 | [Stage 5 — Place](docs/STAGE5_PLACE.md) | Shelf supports, headroom, placement candidates |
 | [Simulation](docs/SIM.md) | Isaac Sim cell, cameras, datasets, livestream |
+| [ROS 2 pipeline](docs/ROS.md) | Nodes, behavior tree, MoveIt, FoundationPose container, episodes |
 | [Decisions & issues](docs/DECISIONS.md) | Why things are the way they are, known issues, roadmap |
 
 ## Repository
@@ -81,21 +105,23 @@ Full setup (FoundationPose container, Isaac Sim venv): [docs/SIM.md](docs/SIM.md
 |---|---|
 | `vision/` | The algorithms: `detect`, `pose`, `spatial`, `grasp`, `place`, `transforms` |
 | `pipeline/` | Stage playgrounds (`interactive_*.py`) and the scripted mustard0 run |
-| `sim/` | Isaac Sim cell (`scene.py`) and YCB mesh → USD conversion |
+| `sim/` | Isaac Sim cell (`cell.py`): dataset capture (`scene.py`), live over ROS 2 (`ros_cell.py`), episodes |
+| `ros2/src/` | ROS 2 packages: `ppp_interfaces`, `ppp_geometry` (C++ RANSAC + pybind11), `ppp_spatial`, `ppp_perception`, `ppp_task` (behavior tree), `ppp_bringup` |
+| `docker/` | Isaac ROS 4.5 FoundationPose image + start script |
 | `config.yaml` | Every tunable parameter, per stage and for the sim |
 | `data/` | Multi-object RGB-D scene (BOP YCB-Video) + reference crops; sim captures (generated) |
 | `docs/` | Stage guides, sim guide, decision log, figures |
-| `tests/` | Unit tests for `vision/` (`pytest tests`, no GPU) |
+| `tests/` | Unit tests for `vision/` + C++/numpy RANSAC equivalence (`pytest`, no GPU) |
 
 ## Roadmap
 
-| Phase | Goal |
-|---|---|
-| 0 · Environment | ROS 2 Jazzy workspace, MoveIt 2, Isaac ROS 4.5 FoundationPose |
-| 1 · Sim ↔ ROS | Cameras, clock and ros2_control from Isaac Sim over ROS 2 |
-| 2 · Motion | MoveIt reaches both pick targets and all three shelf levels |
-| 3 · Perception nodes | One node per stage; shared C++ RANSAC for stages 3 and 5 |
-| 4 · Task | Behavior tree: pick from the table → look at the shelf → place |
-| 5 · Robustness | Hand-eye calibration, sensor noise, success rate over randomised episodes |
+| Phase | Goal | Status |
+|---|---|---|
+| 0 · Environment | ROS 2 Jazzy workspace, MoveIt 2, Isaac ROS 4.5 FoundationPose | ✅ |
+| 1 · Sim ↔ ROS | Cameras, clock and ros2_control from Isaac Sim over ROS 2 | ✅ |
+| 2 · Motion | MoveIt reaches both pick targets and the shelf | ✅ |
+| 3 · Perception nodes | One node per stage; shared C++ RANSAC for stages 3 and 5 | ✅ |
+| 4 · Task | Behavior tree: look at the shelf → pick from the table → place | ✅ |
+| 5 · Robustness | Hand-eye calibration, sensor noise, regrasp, success rate over randomised episodes | 🗺️ Baseline measured |
 
 Details and rationale: [docs/DECISIONS.md](docs/DECISIONS.md).

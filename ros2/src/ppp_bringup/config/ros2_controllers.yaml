@@ -1,0 +1,34 @@
+# ros2_control for the Panda in Isaac Sim: the controller_manager runs inside Isaac (isaacsim.ros2.control,
+# D-015), loaded by sim/ros_cell.py; the controllers are spawned by sim.launch.py. On a real Panda the same
+# controllers would run under franka_ros2 - only the hardware plugin differs.
+controller_manager:
+  ros__parameters:
+    update_rate: 60                 # = sim physics rate (config.yaml sim.physics_dt)
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    panda_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    panda_hand_controller:
+      type: position_controllers/GripperActionController
+
+panda_arm_controller:
+  ros__parameters:
+    joints: [panda_joint1, panda_joint2, panda_joint3, panda_joint4, panda_joint5, panda_joint6, panda_joint7]
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    allow_nonzero_velocity_at_trajectory_end: true
+
+# One finger joint: in Isaac's Franka, panda_finger_joint2 mimics panda_finger_joint1 (state only). Action:
+# /panda_hand_controller/gripper_cmd (control_msgs/GripperCommand), position = one finger's opening (0-0.04 m).
+# No stall handling: on a stall the controller holds the fingers where they are, which takes the squeeze off a
+# grasped object (it then slips out in transit). The goal stays active and keeps squeezing; the task sees the
+# fingers stop by their position (I-019).
+panda_hand_controller:
+  ros__parameters:
+    joint: panda_finger_joint1
+    goal_tolerance: 0.002
+    max_effort: 70.0
+    allow_stalling: false
