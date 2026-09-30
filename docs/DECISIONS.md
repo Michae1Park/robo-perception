@@ -56,6 +56,8 @@ along the way. Newest entries go at the bottom of each list.
 | [D-041](#d-041) | 2026-09-30 | Floor-standing metal pantry, long narrow table, fixed camera re-aimed | Accepted |
 | [D-042](#d-042) | 2026-09-30 | Prompt UI: the prompt says which object, the object library says what it is | Accepted |
 | [D-043](#d-043) | 2026-09-30 | One FoundationPose for every object (mesh loaded per request); all five table objects are targets | Accepted |
+| [D-044](#d-044) | 2026-09-30 | One install script for development; Docker images for deployment only | Accepted |
+| [D-045](#d-045) | 2026-09-30 | Demo GIF: the prompt UI and the sim recorded separately, joined on wall time | Accepted |
 
 ### D-001
 **Keep YOLOE-seg (not OWLv2 + SAM2).** One `ultralytics` model gives box + mask in a single pass and was
@@ -432,6 +434,24 @@ bottle, tomato can, Rubik's cube, sugar box, foam brick. The three new ones got 
 `data/cell_refs/` (the cell's fixed-camera frame + a box): crops of the rendered objects matched weakly. First poses,
 all five, within 5 mm of where the sim placed them. Whole cell, 12 GB of VRAM (sim 4.2, FoundationPose 6.4, YOLOE 1.2).
 
+### D-044
+**Installation: `scripts/install.sh` for development, Docker for deployment.** The script does every step, sudo apt
+included (driver, ROS 2 + MoveIt packages, Docker + NVIDIA Container Toolkit, `.venv`, `.venv-sim`, meshes and weights,
+the FoundationPose image and engines, the ROS build), skips what is done, and runs one step when named. Development
+stays native: code is edited and run in place, with no image rebuilds. For deployment, `docker/Dockerfile` bakes it all
+in: the `app` stage runs the same script's steps on Ubuntu 24.04, the `foundationpose` stage adds the meshes to the
+Isaac ROS image (whose `isaac_ros` stage is also development's FoundationPose image), and `docker/compose.yaml` runs sim,
+FoundationPose, robot and UI on the host network. Both images keep the repo at `/opt/ppp`: FoundationPose is handed mesh
+paths. The TensorRT engines are built on first start into a volume, since they are specific to the GPU.
+
+### D-045
+**Demo GIF from two recordings on one clock.** The sim runs headless, so `ros_cell.py --record DIR` adds a camera at a
+demo view (`config.yaml sim.record`: table, arm and whole pantry) and writes its frames as JPEGs named by wall time (a
+writer thread keeps the sim loop to a copy). `scripts/record_demo.py` drives the prompt UI in headless Chrome
+(Playwright: a text prompt, then an example image) and records the page; `scripts/demo_gif.py` puts both on the page
+video's timeline (UI on top, sim below), speeds it up and writes GIFs with a palette per clip. Not the livestream: it
+stalls Replicator annotators ([D-032](#d-032)), and a screen recording of the WebRTC client would need the laptop.
+
 ## Issues
 
 | ID | Date | Issue | Status |
@@ -475,6 +495,8 @@ all five, within 5 mm of where the sim placed them. Whole cell, 12 GB of VRAM (s
 | [I-037](#i-037) | 2026-09-30 | A can set down at the top board's end ended up off the shelf | Open |
 | [I-038](#i-038) | 2026-09-30 | The pose overlay is drawn in the scene, so the cameras see it too | Workaround |
 | [I-039](#i-039) | 2026-09-30 | With five targets the pantry fills: late carries collide with objects already placed | Open |
+| [I-040](#i-040) | 2026-09-30 | A text prompt's best detection is taken at any score: "the rubik's cube" picked the foam brick at 0.06 | Open |
+| [I-041](#i-041) | 2026-09-30 | Compose: robot's controllers never loaded (spawner timed out; then its params file was in another container's `/tmp`) | Resolved |
 
 ### I-001
 Python fails with errors ordinary code can't produce: `unknown opcode`, `invalid SRE code`, a bogus
@@ -681,6 +703,25 @@ which can spoil detections. **Workaround:** `ros_cell.py --overlay`, off by defa
 ### I-039
 Five targets instead of two: in the first episode the sugar box (4th) was picked, but every carry path to its
 placement collided with objects already on the shelf (`held_sugar_box-shelf_clutter`), and the task gave it up.
+3 episodes, all five targets ([D-043](#d-043)): **10/15 placed** (mustard 2/3, tomato can 2/3, Rubik's cube 3/3,
+sugar box 1/3, foam brick 2/3; the task's own verdict agreed with ground truth 15/15). All five failures are motion:
+"no plan to joint target" with the held object hitting boards or objects already on the shelf, and one aborted
+execution. Every object was detected and posed in every episode.
+
+### I-040
+`~/set_prompt` takes a text prompt's best detection whatever its score. With all five objects as targets,
+"the rubik's cube" found the foam brick at 0.06, and the library confirmed it (the brick is a target), so the robot
+would have picked the wrong object. "The colorful cube" (0.48) and "the red block" (0.69) found the cube. A score floor
+would stop this, but "the mustard" was right at 0.05; needs a decision (floor, or ask the user to confirm low scores).
+
+### I-041
+In `docker compose up`, `depends_on` only orders container starts. The sim took ~160 s after a reboot to bring up its
+controller_manager, and robot's spawner gives up after 120 s, so the arm and hand controllers never loaded: the first
+prompt's grasp closed on nothing and the arm ended in self-collision. Development never hits it because the sim is
+started first. Fix: the `sim` service has a healthcheck (`/controller_manager/list_controllers` is served) and `robot`
+waits for `service_healthy`. Then loading still failed: `parameters=` on the spawner makes launch write a params file to
+robot's `/tmp`, and the spawner hands its path to the controller_manager, which runs in the sim container. The spawner now
+takes `use_sim_time` as a ROS argument. With both fixes a text-prompted mustard pick placed 1/1 through compose.
 
 | ID | Question | Notes |
 |---|---|---|

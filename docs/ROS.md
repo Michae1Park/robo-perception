@@ -29,16 +29,9 @@ an old step 2 is still running: `ros2 node list | sort | uniq -d` must print not
 
 ## Setup (once)
 
-| What | Command |
-|---|---|
-| apt (needs sudo) | `sudo apt install ros-jazzy-moveit ros-jazzy-moveit-resources-panda-moveit-config ros-jazzy-moveit-resources-panda-description ros-jazzy-pick-ik ros-jazzy-ros2-control ros-jazzy-ros2-controllers ros-jazzy-behaviortree-cpp ros-jazzy-vision-msgs ros-jazzy-foxglove-bridge` |
-| pybind11 for numpy 2 | `.venv/bin/pip install -r requirements.txt` |
-| Build the workspace | `ros2/build.sh` |
-| FoundationPose image (~40 GB, ~30 min) | `docker build -f docker/Dockerfile.isaac_ros -t ppp-isaac-ros:4.5 docker/` |
-| Camera extrinsics (ground-truth stand-in, I-018) | `.venv/bin/python sim/write_calibration.py` (again after moving a camera) |
-
-`docker/foundationpose.sh` fetches the ONNX models and builds the TensorRT engines on first start
-(`models/isaac_ros/foundationpose/`, NVIDIA's model license applies).
+`scripts/install.sh` ([README](../README.md#install)): apt packages, `.venv`, `.venv-sim`, the FoundationPose image
+and engines, `ros2/build.sh`, camera extrinsics. Again after moving a camera: `.venv/bin/python sim/write_calibration.py`
+(ground-truth stand-in, I-018).
 
 ## Architecture
 
@@ -133,10 +126,13 @@ object), press **Pick it up**, and watch the fixed and wrist cameras, what `dete
 |---|---|
 | "the yellow bottle", "the mustard" | mustard bottle (0.91, 0.05) |
 | "the red can", "red and white can" | tomato can (0.24, 0.50) |
-| "the rubik's cube" | a block, not one I know |
+| "the colorful cube", "the red block" | Rubik's cube (0.48, 0.69) |
+| "the sugar box", "the foam brick" | sugar box (0.45), foam brick (0.35) |
+| "the rubik's cube" | **the foam brick** (0.06): wrong object, [I-040](DECISIONS.md#i-040) |
+| "the white box" | a cup, not one I know |
 | "tomato soup can", "a banana", "brick" | nothing matches (the lying can isn't found by its name) |
 | Example images `assets/prompts/`: mustard, tomato can | mustard (0.63), tomato can (0.58); as given, without padding: 0.37 and nothing |
-| Example images: sugar box, foam brick / Rubik's cube | a box, not one I know / nothing matches |
+| Example images: sugar box, foam brick / Rubik's cube | sugar box (0.67), foam brick (0.19) / nothing matches |
 | Full runs from the page | tomato can from its image 2/2 placed; mustard from "the yellow bottle" 1/2 (the miss: execution failed on both lying-down placements, with the can already on the 0.45 board) |
 
 ## Measured (sim, L40S)
@@ -160,6 +156,7 @@ object), press **Pick it up**, and watch the fixed and wrist cameras, what `dete
 | `sim/cell.py` | Scene building shared with `sim/scene.py` |
 | `sim/write_calibration.py` | Camera extrinsics file (ground-truth stand-in) |
 | `sim/episodes.py` | Randomised episodes, success judged on ground truth |
-| `docker/Dockerfile.isaac_ros`, `docker/foundationpose.sh`, `docker/fp_run.sh` | Isaac ROS 4.5 FoundationPose image, start script (host), start inside the container |
+| `docker/Dockerfile` (`isaac_ros` stage), `docker/foundationpose.sh`, `docker/fp_run.sh` | Isaac ROS 4.5 FoundationPose image, start script (host), start inside the container |
+| `docker/Dockerfile` (`app`, `foundationpose`), `docker/compose.yaml` | Deployment images and services |
 | `ros2/build.sh` | colcon build with the right pybind11 |
 | `ros2/src/ppp_bringup/config/` | `ros2_controllers.yaml`, `calibration.yaml` |

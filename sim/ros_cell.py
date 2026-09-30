@@ -6,6 +6,7 @@ evaluation only (D-010). Same scene as scene.py (sim/cell.py), but it keeps runn
   .venv-sim/bin/python sim/ros_cell.py --seed 3 --rtf 0   # other object yaws; as fast as possible
   .venv-sim/bin/python sim/ros_cell.py --livestream    # also stream the viewport to the WebRTC client (D-032)
   .venv-sim/bin/python sim/ros_cell.py --livestream --overlay   # + draw pose estimates (D-034; the cameras see it too)
+  .venv-sim/bin/python sim/ros_cell.py --record output/rec/sim   # save the viewport view as JPEGs (demo video, D-045)
 
 Published (pipeline-facing, RealSense-style names; depth 16UC1 mm, aligned to colour):
   /camera/camera/color/image_raw, .../color/camera_info,
@@ -47,7 +48,13 @@ ap.add_argument('--livestream', action='store_true',
 ap.add_argument('--overlay', action='store_true',
                 help='draw pose estimates and placements in the scene (D-034). The cameras see the lines too, which '
                      'can spoil detections (I-038): for watching and recording only')
+ap.add_argument('--record', metavar='DIR',
+                help='save the demo-video view (config sim.record) to DIR/<wall time ms>.jpg for a demo video (D-045). '
+                     'Not with --livestream (streaming stalls Replicator)')
+ap.add_argument('--record-hz', type=float, default=15.0, help='--record frame rate (sim time)')
 args = ap.parse_args()
+if args.record and args.livestream:
+    ap.error('--record and --livestream: streaming stalls Replicator annotators')
 
 os.environ.setdefault('OMNI_KIT_ACCEPT_EULA', 'YES')
 from isaacsim import SimulationApp  # noqa: E402
@@ -74,8 +81,9 @@ from std_srvs.srv import Trigger  # noqa: E402
 
 sys.path.insert(0, REPO)
 sys.path.insert(0, os.path.join(REPO, 'sim'))
-from cell import (add_camera, add_camera_rig, add_wrist_camera, build_scene, drop_all, place_on_shelf,  # noqa: E402
-                  quat_wxyz, reset_robot, set_viewport, start_livestream, world_pose_cv)
+from cell import (USD_FROM_CV, add_camera, add_camera_rig, add_wrist_camera, build_scene, define_camera,  # noqa: E402
+                  drop_all, get_current_stage, place_on_shelf, quat_wxyz, reset_robot, set_pose, set_viewport,
+                  start_livestream, world_pose_cv)
 from vision import load_config  # noqa: E402
 from vision import transforms as tf  # noqa: E402
 
@@ -110,6 +118,37 @@ def pose_msg(T, t):
     w, x, y, z = quat_wxyz(T[:3, :3])
     m.pose.orientation.w, m.pose.orientation.x, m.pose.orientation.y, m.pose.orientation.z = map(float, (w, x, y, z))
     return m
+
+
+class Recorder:
+    """The demo-video view (config sim.record), 1280x720, written as JPEGs named by wall time (ms), so
+    they line up with a screen recording of the prompt UI. Written from a thread: the sim loop only copies the frame."""
+
+    def __init__(self, cfg, out_dir, w=1280, h=720):
+        import queue
+        import threading
+        import cv2
+        self.cv2, self.dir = cv2, out_dir
+        os.makedirs(out_dir, exist_ok=True)
+        path = '/World/RecordCamera'
+        define_camera(path, w, h, w / 2.0 / np.tan(np.deg2rad(cfg['record']['hfov_deg']) / 2))
+        set_pose(get_current_stage().GetPrimAtPath(path),
+                 tf.look_at(cfg['record']['eye'], cfg['record']['target']) @ USD_FROM_CV)
+        self.rgb = rep.AnnotatorRegistry.get_annotator('rgb')
+        self.rgb.attach(rep.create.render_product(path, (w, h)))
+        self.q = queue.Queue(maxsize=64)
+        threading.Thread(target=self.write, daemon=True).start()
+
+    def grab(self):
+        rgb = np.asarray(self.rgb.get_data())
+        if rgb.size and not self.q.full():
+            self.q.put((time.time(), rgb[..., :3].copy()))
+
+    def write(self):
+        while True:
+            t, rgb = self.q.get()
+            self.cv2.imwrite(os.path.join(self.dir, '%d.jpg' % round(t * 1000)), rgb[..., ::-1],
+                             [self.cv2.IMWRITE_JPEG_QUALITY, 92])
 
 
 class RGBDPublisher:
@@ -329,6 +368,7 @@ def main():
     add_camera_rig(T_world_cam, -cfg['table_size'][2], cam_cfg['rig'])
     wrist_path = add_wrist_camera(cam_cfg, cfg['wrist_camera'])
     add_clock_graph()
+    recorder = Recorder(cfg, args.record) if args.record else None
 
     w, h = cam_cfg['width'], cam_cfg['height']
     cams = [RGBDPublisher(node, cam_path, '/camera', 'camera_color_optical_frame', K, w, h),
@@ -355,6 +395,7 @@ def main():
     start_ros2_control(world)
     dt = cfg['physics_dt']
     every = max(1, int(round(1.0 / (args.camera_hz * dt))))
+    rec_every = max(1, int(round(1.0 / (args.record_hz * dt))))
     if args.livestream:
         set_viewport(cfg)
         print('[ros_cell] streaming on TCP 49100 / UDP 47998 - connect the Isaac Sim WebRTC Streaming Client '
@@ -385,6 +426,8 @@ def main():
                     gt_pub[n].publish(pose_msg(tf.make_T(R, p), t))
                 gt_cam.publish(pose_msg(T_world_cam, t))
                 gt_wrist.publish(pose_msg(world_pose_cv(wrist_path), t))
+            if recorder and step % rec_every == 0:
+                recorder.grab()
             if args.rtf > 0:   # don't run ahead of wall time (x rtf)
                 ahead = (t - sim0) / args.rtf - (time.monotonic() - wall0)
                 if ahead > 0:

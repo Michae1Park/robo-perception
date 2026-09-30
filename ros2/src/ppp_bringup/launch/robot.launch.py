@@ -38,7 +38,9 @@ def generate_launch_description():
     spawner = Node(package='controller_manager', executable='spawner', output='screen',
                    arguments=['joint_state_broadcaster', 'panda_arm_controller', 'panda_hand_controller',
                               '--param-file', controllers, '--controller-manager-timeout', '120'],
-                   parameters=[{'use_sim_time': True}])
+                   # not parameters=: launch writes those to a file in this machine's /tmp and the spawner passes its
+                   # path on to the controller_manager, which runs in the sim (another container under Docker)
+                   ros_arguments=['-p', 'use_sim_time:=true'])
     return LaunchDescription([
         DeclareLaunchArgument('foxglove', default_value='false', description='start foxglove_bridge (port 8765)'),
         Node(package='robot_state_publisher', executable='robot_state_publisher', output='log',

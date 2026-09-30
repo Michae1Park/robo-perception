@@ -35,17 +35,10 @@ Both camera bodies and the tripod are visual only (no colliders), and never appe
 
 ## Setup (once)
 
-Workstation terminal. Isaac Sim gets its own venv (Python 3.12, ~30–40 GB download).
+Isaac Sim 6.1 gets its own venv, `.venv-sim` (Python 3.12, ~26 GB): `scripts/install.sh sim`
+([README](../README.md#install)).
 
-```bash
-cd ~/workspace/prompt-pick-place
-uv venv .venv-sim --python 3.12
-uv pip install --python .venv-sim/bin/python "isaacsim[all,extscache]==6.1.0.0" \
-    --extra-index-url https://pypi.nvidia.com --index-strategy unsafe-best-match
-```
-
-The first run asks you to accept the NVIDIA Omniverse EULA (or set `OMNI_KIT_ACCEPT_EULA=YES`) and compiles shaders
-(~3 min, once). After that a `scene.py` run takes ~15 s. Robot and camera assets come from NVIDIA's asset server.
+The first run compiles shaders (~3 min, once). After that a `scene.py` run takes ~15 s. Robot and camera assets come from NVIDIA's asset server.
 
 ## Datasets (`scene.py`)
 

@@ -2,9 +2,13 @@
 # (scripts/install.sh driver docker). Development runs natively instead (README, "Install").
 #
 #   docker compose -f docker/compose.yaml build                     # once, and after code changes (~1 h the first time)
+#   A · prompt UI:
 #   docker compose -f docker/compose.yaml up                        # sim + robot + FoundationPose + prompt UI (:8088)
-#   docker compose -f docker/compose.yaml run --rm task             # or: every target, scripted (instead of the UI)
-#   SIM_ARGS=--livestream docker compose -f docker/compose.yaml up  # + the sim viewport over WebRTC
+#   B · scripted, instead of A (never both: they drive the same arm):
+#   docker compose -f docker/compose.yaml up robot                  # sim + robot + FoundationPose, no UI
+#   docker compose -f docker/compose.yaml run --rm task             # then, in a second terminal: every target, exits
+#
+#   SIM_ARGS=--livestream docker compose -f docker/compose.yaml up  # either option: + the sim viewport over WebRTC
 #
 # Host network + IPC: ROS 2 (DDS, shared memory) spans the containers and the host, as in development.
 x-gpu: &gpu
@@ -25,6 +29,12 @@ services:
     command: bash -c ".venv-sim/bin/python sim/ros_cell.py $${SIM_ARGS}"
     environment: {SIM_ARGS: "${SIM_ARGS:-}", ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-0}"}
     volumes: [isaac-cache:/root/.cache]      # Isaac Sim's shader cache: the first start takes minutes, later ones don't
+    healthcheck:                             # healthy once its controller_manager serves: robot's spawner needs it
+      test: [CMD, bash, -c, "source /opt/ppp/ros2/install/setup.bash && ros2 service list --no-daemon | grep -qx /controller_manager/list_controllers"]
+      interval: 10s
+      timeout: 20s
+      start_period: 15m
+      start_interval: 5s
 
   foundationpose:
     <<: *gpu
@@ -36,7 +46,9 @@ services:
   robot:
     <<: *gpu
     image: ppp:latest
-    depends_on: [sim, foundationpose]
+    depends_on:                              # start waits for the sim: its first start can outlast the spawner's timeout
+      sim: {condition: service_healthy}
+      foundationpose: {condition: service_started}
     command: ros2 launch ppp_bringup all.launch.py eval:=true foundationpose:=false
 
   ui:
