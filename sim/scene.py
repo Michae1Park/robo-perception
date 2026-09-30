@@ -33,6 +33,7 @@ ap.add_argument('--arm', choices=['home', 'look'], default='home',
                 help='--livestream only: arm pose to show (look = the wrist camera looking into the shelf)')
 args = ap.parse_args()
 
+os.environ.setdefault('OMNI_KIT_ACCEPT_EULA', 'YES')   # accepted at install (scripts/install.sh sim)
 from isaacsim import SimulationApp  # noqa: E402  (must be created before any other omni/isaacsim import)
 
 app = SimulationApp({'headless': True, 'hide_ui': not args.livestream, 'width': 1280, 'height': 720})

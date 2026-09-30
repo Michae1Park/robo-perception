@@ -1,0 +1,14 @@
+# the deployment image downloads and builds these itself (scripts/install.sh)
+.git
+.venv
+.venv-sim
+models
+third_party
+output
+assets/ycb
+data/sim
+ros2/build
+ros2/install
+ros2/log
+**/__pycache__
+*.etli

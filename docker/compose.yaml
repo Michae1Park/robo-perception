@@ -1,0 +1,56 @@
+# Deployment: the whole cell from two images (docker/Dockerfile). Needs Docker + the NVIDIA Container Toolkit
+# (scripts/install.sh driver docker). Development runs natively instead (README, "Install").
+#
+#   docker compose -f docker/compose.yaml build                     # once, and after code changes (~1 h the first time)
+#   docker compose -f docker/compose.yaml up                        # sim + robot + FoundationPose + prompt UI (:8088)
+#   docker compose -f docker/compose.yaml run --rm task             # or: every target, scripted (instead of the UI)
+#   SIM_ARGS=--livestream docker compose -f docker/compose.yaml up  # + the sim viewport over WebRTC
+#
+# Host network + IPC: ROS 2 (DDS, shared memory) spans the containers and the host, as in development.
+x-gpu: &gpu
+  network_mode: host
+  ipc: host
+  environment:
+    ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+  deploy:
+    resources:
+      reservations:
+        devices: [{driver: nvidia, count: all, capabilities: [gpu, compute, utility, graphics]}]
+
+services:
+  sim:
+    <<: *gpu
+    image: ppp:latest
+    build: {context: .., dockerfile: docker/Dockerfile, target: app}
+    command: bash -c ".venv-sim/bin/python sim/ros_cell.py $${SIM_ARGS}"
+    environment: {SIM_ARGS: "${SIM_ARGS:-}", ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-0}"}
+    volumes: [isaac-cache:/root/.cache]      # Isaac Sim's shader cache: the first start takes minutes, later ones don't
+
+  foundationpose:
+    <<: *gpu
+    image: ppp-foundationpose:latest
+    build: {context: .., dockerfile: docker/Dockerfile, target: foundationpose}
+    command: /opt/ppp/docker/fp_run.sh
+    volumes: [fp-engines:/opt/ppp/models/isaac_ros/foundationpose]   # TensorRT engines, built for this GPU on first start
+
+  robot:
+    <<: *gpu
+    image: ppp:latest
+    depends_on: [sim, foundationpose]
+    command: ros2 launch ppp_bringup all.launch.py eval:=true foundationpose:=false
+
+  ui:
+    <<: *gpu
+    image: ppp:latest
+    depends_on: [robot]
+    command: .venv/bin/python ui/prompt_ui.py
+
+  task:
+    <<: *gpu
+    image: ppp:latest
+    profiles: [task]
+    command: ros2 launch ppp_bringup task.launch.py
+
+volumes:
+  isaac-cache:
+  fp-engines:
