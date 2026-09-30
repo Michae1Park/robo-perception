@@ -147,3 +147,79 @@ def candidates(s, grid, radius, need_headroom, cfg, shoulder=SHOULDER):
         out.append({'xy': xy, 'z': s['z'], 'clearance': float(s['clearance'][iy, ix]),
                     'headroom': float(headroom[iy, ix]), 'reach': float(reach)})
     return out
+
+
+# ---------------------------------------------------------------- how the object can be set down
+def _hull2d_min_width(pts):
+    """Minimum width of a 2D point set (rotating calipers over its convex hull edges)."""
+    from scipy.spatial import ConvexHull
+    if len(pts) < 3:
+        return 0.0
+    try:
+        h = pts[ConvexHull(pts).vertices]
+    except Exception:  # noqa: BLE001  (collinear / degenerate: a line or a point)
+        return 0.0
+    best = np.inf
+    for i in range(len(h)):
+        e = h[(i + 1) % len(h)] - h[i]
+        n = np.array([-e[1], e[0]]) / (np.linalg.norm(e) + 1e-12)
+        best = min(best, np.ptp(h @ n))
+    return float(best)
+
+
+def _margin_inside(pts, c):
+    """Distance from c to the boundary of the 2D convex hull of pts (negative = outside)."""
+    from scipy.spatial import ConvexHull
+    try:
+        hull = ConvexHull(pts)
+    except Exception:  # noqa: BLE001
+        return -np.inf
+    # scipy's 2D equations: n . x + d <= 0 inside
+    return float(-(hull.equations[:, :2] @ c + hull.equations[:, 2]).max())
+
+
+def _rotation_to_down(n):
+    """Rotation R (object -> world) that turns the object-frame direction n to world -z."""
+    n = n / np.linalg.norm(n)
+    down = np.array([0.0, 0.0, -1.0])
+    v = np.cross(n, down)
+    c = float(np.dot(n, down))
+    if np.linalg.norm(v) < 1e-9:
+        return np.eye(3) if c > 0 else np.diag([1.0, -1.0, -1.0])
+    vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+    return np.eye(3) + vx + vx @ vx / (1 + c)
+
+
+def rest_poses(verts, com=None, contact_tol=0.002, min_width=0.028, min_margin=0.005, max_tilt_deg=135.0,
+               merge_deg=8.0):
+    """How the object can stand on a flat support: one entry per resting face of its convex hull whose support
+    polygon holds the centre of mass (with `min_margin`) and is at least `min_width` wide. Narrower means a curved
+    surface resting on one facet of the tessellated hull: a can on its side (2.0-2.5 cm facets) would roll. Upside-down poses (the mesh's +z tilted more than `max_tilt_deg`) are left out.
+
+    YCB meshes are modelled upright (+z up), so the tilt of the mesh's +z from vertical ranks the poses:
+    upright first, the "common-sense" way to store a bottle or a can; the rest by stability margin.
+    -> list of dicts: R (object -> world, yaw arbitrary), tilt_deg, height, margin, width, name."""
+    from scipy.spatial import ConvexHull
+    verts = np.asarray(verts, float)
+    com = verts.mean(axis=0) if com is None else np.asarray(com, float)
+    hull = ConvexHull(verts)
+    poses = []
+    for eq in hull.equations:
+        n = eq[:3] / np.linalg.norm(eq[:3])                      # outward normal of a hull face: rest on it
+        if any(np.degrees(np.arccos(np.clip(n @ p['n'], -1, 1))) < merge_deg for p in poses):
+            continue
+        R = _rotation_to_down(n)
+        W = verts @ R.T
+        c = R @ com
+        base = W[:, 2] <= W[:, 2].min() + contact_tol
+        width = _hull2d_min_width(W[base, :2])
+        margin = _margin_inside(W[base, :2], c[:2]) if width > 0 else -np.inf
+        tilt = float(np.degrees(np.arccos(np.clip(R[2, 2], -1, 1))))  # world z of the mesh's +z
+        poses.append({'n': n, 'R': R, 'tilt_deg': tilt, 'height': float(np.ptp(W[:, 2])), 'margin': margin,
+                      'width': width})
+    keep = [p for p in poses if p['width'] >= min_width and p['margin'] >= min_margin and p['tilt_deg'] <= max_tilt_deg]
+    keep.sort(key=lambda p: (round(p['tilt_deg'] / 30.0), -p['margin']))
+    for p in keep:
+        p['name'] = 'upright' if p['tilt_deg'] < 30 else 'on its side' if p['tilt_deg'] < 120 else 'tipped'
+        del p['n']
+    return keep

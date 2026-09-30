@@ -9,3 +9,4 @@ torch
 ultralytics==8.3.150
 jupyterlab
 ipywidgets
+pybind11>=2.13        # builds ros2/ ppp_geometry_py against numpy 2 (ros2/build.sh)
