@@ -22,35 +22,15 @@ from vision import transforms as tf  # noqa: E402
 OUT = os.path.join(REPO, 'ros2', 'src', 'ppp_bringup', 'config', 'calibration.yaml')
 
 
-def look_at(eye, target, up=(0.0, 0.0, 1.0)):
-    """Same as sim/cell.py look_at (kept here so this runs without Isaac Sim)."""
-    eye, target = np.asarray(eye, float), np.asarray(target, float)
-    z = target - eye
-    z /= np.linalg.norm(z)
-    x = np.cross(z, up)
-    x /= np.linalg.norm(x)
-    return tf.make_T(np.stack([x, np.cross(z, x), z], axis=1), eye)
-
-
-def quat_xyzw(R):
-    """Rotation matrix -> quaternion (x, y, z, w)."""
-    w = np.sqrt(max(0.0, 1.0 + R[0, 0] + R[1, 1] + R[2, 2])) / 2
-    x = np.sqrt(max(0.0, 1.0 + R[0, 0] - R[1, 1] - R[2, 2])) / 2
-    y = np.sqrt(max(0.0, 1.0 - R[0, 0] + R[1, 1] - R[2, 2])) / 2
-    z = np.sqrt(max(0.0, 1.0 - R[0, 0] - R[1, 1] + R[2, 2])) / 2
-    x, y, z = np.copysign(x, R[2, 1] - R[1, 2]), np.copysign(y, R[0, 2] - R[2, 0]), np.copysign(z, R[1, 0] - R[0, 1])
-    return [float(v) for v in (x, y, z, w)]
-
-
 def entry(parent, child, T):
     return {'parent': parent, 'child': child, 'xyz': [round(float(v), 6) for v in T[:3, 3]],
-            'quat_xyzw': [round(v, 8) for v in quat_xyzw(T[:3, :3])]}
+            'quat_xyzw': [round(float(v), 8) for v in tf.R_to_quat(T[:3, :3])]}
 
 
 def main():
     cfg = load_config()['sim']
     cam, wrist = cfg['camera'], cfg['wrist_camera']
-    T_base_cam = look_at(cam['eye'], cam['target'])    # sim world = robot base (panda_link0)
+    T_base_cam = tf.look_at(cam['eye'], cam['target'])    # sim world = robot base (panda_link0)
     T_hand_cam = tf.make_T(tf.rot_z(np.deg2rad(wrist['mount_yaw_deg'])), wrist['mount_xyz'])
     doc = {'source': 'sim ground truth (config.yaml sim:) - STAND-IN for hand-eye calibration, see '
                      'docs/DECISIONS.md I-018',

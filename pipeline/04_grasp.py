@@ -16,7 +16,7 @@ import numpy as np
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
-from vision import grasp as g, load_config, viz  # noqa: E402
+from vision import grasp as g, load_config, read_obj_vertices, viz  # noqa: E402
 
 DATA = os.path.join(REPO, 'third_party', 'FoundationPose', 'demo_data', 'mustard0')
 MESH = os.path.join(DATA, 'mesh', 'textured_simple.obj')
@@ -32,7 +32,7 @@ def main():
     T_world_cam = np.loadtxt(os.path.join(OUT, '03_T_world_cam.txt'))
     T_world_obj = T_world_cam @ np.loadtxt(os.path.join(OUT, '02_pose_ob_in_cam.txt'))
 
-    verts = g.read_obj_vertices(MESH)
+    verts = read_obj_vertices(MESH)
     lo, hi = verts.min(axis=0), verts.max(axis=0)
     cands = g.generate_candidates(lo, hi, gripper['max_opening'], gcfg['width_margin'], gripper['finger_depth'])
     feasible = g.filter_candidates(cands, T_world_obj, 0.0, gcfg['max_approach_tilt_deg'],  # table_z = 0

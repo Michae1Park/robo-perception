@@ -4,8 +4,7 @@ import os
 import numpy as np
 import pytest
 
-from vision import REPO
-from vision.grasp import read_obj_vertices
+from vision import REPO, read_obj_vertices
 from vision.place import rest_poses
 
 

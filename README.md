@@ -6,8 +6,8 @@ put it — with no object-specific training and no prior model of the shelf.
 
 ![Isaac Sim cell: Franka Panda, table with YCB objects, shelf, fixed RealSense D455 on a tripod and a wrist-mounted D455](docs/sim/overview.png)
 
-*Simulated cell (Isaac Sim 6.1): Franka Panda, a table of YCB objects, a three-level shelf as the place target,
-a fixed RealSense D455 over the table, and a wrist-mounted D455 that looks into the shelf.*
+*Simulated cell (Isaac Sim 6.1): Franka Panda with lengthened fingers, a table of YCB objects, a metal pantry as the
+place target, a fixed RealSense D455 over the table, and a wrist-mounted D455 that looks into the shelf.*
 
 ## Pipeline
 
@@ -18,7 +18,7 @@ a fixed RealSense D455 over the table, and a wrist-mounted D455 that looks into 
 | 3 | **Table** | Where is the table, and what is free? | RANSAC plane + occupancy grid | ✅ Built |
 | 4 | **Grasp** | How should the gripper take it? | Parallel-jaw candidates + tilt / table / collision filter | ✅ Built |
 | 5 | **Place** | Where on the shelf does it fit? | Sequential RANSAC for horizontal supports + free-space search | ✅ Built |
-| — | **Execute** | Move the robot | ROS 2 Jazzy · MoveIt 2 · BehaviorTree.CPP · ros2_control in Isaac Sim | ✅ Built |
+| — | **Execute** | Move the robot | ROS 2 Jazzy · MoveIt 2 (pick_ik, Pilz, OMPL) · BehaviorTree.CPP · ros2_control in Isaac Sim | ✅ Built |
 
 ![Stages 1–5 on one scene](docs/pipeline_demo/stages.png)
 
@@ -31,7 +31,9 @@ wrist camera ─► 5 Place ─────────────────�
 
 In ROS 2 each stage is a node (stage 2 is Isaac ROS FoundationPose in Docker, stage 3 and the RANSAC of stage 5 are
 C++); a BehaviorTree.CPP task manager sequences them and moves the Panda through MoveIt 2 and ros2_control running
-inside Isaac Sim. Guide: [docs/ROS.md](docs/ROS.md).
+inside Isaac Sim. It chooses a grasp and a placement together, and moves between IK solutions chained from one natural
+arm configuration (straight joint-space lines, else via home, STOMP or RRTConnect), with the held object part of the robot for collision
+checking. Guide: [docs/ROS.md](docs/ROS.md).
 
 ## Results
 
@@ -41,7 +43,8 @@ inside Isaac Sim. Guide: [docs/ROS.md](docs/ROS.md).
 | 2 Pose | Sim, vs. ground truth: **0.5–1.5°, < 1 mm** (upright bottle and a can lying on its side) · ~0.9 s / registration |
 | 3 Table | Table plane from 52 % of the points; recovered bottle height 92 mm vs. 96 mm true (pose and plane agree) |
 | 4 Grasp | 2 of 8 candidates feasible; best approaches 2° from vertical |
-| 5 Place | All three shelf levels found at their true heights (0.00 / 0.32 / 0.64 m) · 9 placements ranked by clearance · 0.15 s |
+| 5 Place | The three visible pantry boards found at their true heights (−0.35 / 0.05 / 0.45 m) · 6 placements ranked by clearance · 0.2 s |
+| Whole task | Randomised episodes, perception to placement: **mustard 10/10, tomato can 8/10** (stood upright, 10 episodes, two-board shelf) · 3/3 each in the pantry cell ([D-041](docs/DECISIONS.md#d-041)) · 77 % of moves a single straight joint-space line |
 
 Stage-by-stage details, numbers and failure cases are in each guide below.
 
@@ -81,10 +84,9 @@ To watch from another machine:
 | **Sim viewport** | Add `--livestream` to step 1, then connect the Isaac Sim WebRTC Streaming Client to the workstation's IP |
 | **ROS data** (detections, planned paths, TF) | Add `foxglove:=true` to step 2, then open `ws://<workstation-ip>:8765` in Foxglove |
 
-Run only one sim at a time: `ros_cell.py` refuses to start if another one is already publishing `/clock`. After
-restarting the sim, restart step 2 as well, since running nodes keep the old sim time.
-
-Full setup (FoundationPose container, Isaac Sim venv): [docs/SIM.md](docs/SIM.md) and the stage guides.
+Run one sim at a time, and after restarting it restart step 2 too (running nodes keep the old sim time). Setup (apt
+packages incl. `ros-jazzy-pick-ik`, FoundationPose image, Isaac Sim venv): [docs/ROS.md](docs/ROS.md),
+[docs/SIM.md](docs/SIM.md).
 
 ## Documentation
 
@@ -95,8 +97,8 @@ Full setup (FoundationPose container, Isaac Sim venv): [docs/SIM.md](docs/SIM.md
 | [Stage 3 — Table](docs/STAGE3_SPATIAL.md) | RANSAC, table frame, occupancy grid |
 | [Stage 4 — Grasp](docs/STAGE4_GRASP.md) | Candidates, filter, object and gripper poses in every frame |
 | [Stage 5 — Place](docs/STAGE5_PLACE.md) | Shelf supports, headroom, placement candidates |
-| [Simulation](docs/SIM.md) | Isaac Sim cell, cameras, datasets, livestream |
-| [ROS 2 pipeline](docs/ROS.md) | Nodes, behavior tree, MoveIt, FoundationPose container, episodes |
+| [Simulation](docs/SIM.md) | Cell layout, gripper, cameras, datasets, livestream |
+| [ROS 2 pipeline](docs/ROS.md) | Nodes, behavior tree, motion planning, FoundationPose container, episodes |
 | [Decisions & issues](docs/DECISIONS.md) | Why things are the way they are, known issues, roadmap |
 
 ## Repository
@@ -104,7 +106,7 @@ Full setup (FoundationPose container, Isaac Sim venv): [docs/SIM.md](docs/SIM.md
 | Path | Contents |
 |---|---|
 | `vision/` | The algorithms: `detect`, `pose`, `spatial`, `grasp`, `place`, `transforms` |
-| `pipeline/` | Stage playgrounds (`interactive_*.py`) and the scripted mustard0 run |
+| `pipeline/` | Offline stage playgrounds (`interactive_*.py`) and the scripted mustard0 run; not used by the robot |
 | `sim/` | Isaac Sim cell (`cell.py`): dataset capture (`scene.py`), live over ROS 2 (`ros_cell.py`), episodes |
 | `ros2/src/` | ROS 2 packages: `ppp_interfaces`, `ppp_geometry` (C++ RANSAC + pybind11), `ppp_spatial`, `ppp_perception`, `ppp_task` (behavior tree), `ppp_bringup` |
 | `docker/` | Isaac ROS 4.5 FoundationPose image + start script |
@@ -122,6 +124,7 @@ Full setup (FoundationPose container, Isaac Sim venv): [docs/SIM.md](docs/SIM.md
 | 2 · Motion | MoveIt reaches both pick targets and the shelf | ✅ |
 | 3 · Perception nodes | One node per stage; shared C++ RANSAC for stages 3 and 5 | ✅ |
 | 4 · Task | Behavior tree: look at the shelf → pick from the table → place | ✅ |
-| 5 · Robustness | Hand-eye calibration, sensor noise, regrasp, success rate over randomised episodes | 🗺️ Baseline measured |
+| 4b · Clean motions | Reachable layout, longer fingers, chained IK + straight joint-space moves | ✅ 18/20 placed (was 9/16) |
+| 5 · Robustness | Hand-eye calibration, sensor noise, vision checks (D-039), success rate over randomised episodes | 🗺️ Next |
 
 Details and rationale: [docs/DECISIONS.md](docs/DECISIONS.md).

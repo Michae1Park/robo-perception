@@ -3,11 +3,13 @@
 #include <behaviortree_cpp/decorators/loop_node.h>
 #include <moveit/robot_trajectory/robot_trajectory.hpp>
 #include <moveit/trajectory_processing/time_optimal_trajectory_generation.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <tf2_eigen/tf2_eigen.hpp>
 
-#include <optional>
-#include <sensor_msgs/point_cloud2_iterator.hpp>
+#include <algorithm>
+#include <cmath>
 #include <map>
+#include <optional>
 #include <tuple>
 
 #include "ppp_interfaces/msg/grasp.hpp"
@@ -24,6 +26,7 @@ using PlacementQueue = BT::SharedQueue<Placement>;
 using BT::InputPort;
 using BT::NodeStatus;
 using BT::OutputPort;
+using MoveItCode = moveit::core::MoveItErrorCode;
 
 namespace
 {
@@ -40,6 +43,27 @@ Pose to_msg(const Eigen::Isometry3d & T, const std::string & frame)
   p.header.frame_id = frame;
   p.pose = tf2::toMsg(T);
   return p;
+}
+
+// Summed joint motion (rad) along a trajectory: how much the arm moves to get there. A clean path is short.
+double joint_travel(const moveit_msgs::msg::RobotTrajectory & traj)
+{
+  const auto & pts = traj.joint_trajectory.points;
+  double sum = 0.0;
+  for (std::size_t k = 1; k < pts.size(); ++k) {
+    for (std::size_t j = 0; j < pts[k].positions.size(); ++j) {
+      sum += std::abs(pts[k].positions[j] - pts[k - 1].positions[j]);
+    }
+  }
+  return sum;
+}
+
+// `q` with joint 1 turned towards the TCP pose: an IK seed that faces the goal, so the solver stays in the same
+// (natural) configuration family instead of wandering off to a flipped one.
+Joints aim(Joints q, const Eigen::Isometry3d & tcp)
+{
+  q[0] = std::clamp(std::atan2(tcp.translation().y(), tcp.translation().x()), -2.8, 2.8);
+  return q;
 }
 
 // Base class: access to the shared context, plus logging with the node's name in the tree.
@@ -69,78 +93,110 @@ protected:
 };
 
 // ---------------------------------------------------------------- motion
+// Free-space motion to a joint configuration: a named one ("home", "look") or one from the plan (SelectPlans IK).
+// Joint targets, not pose targets: a pose target lets the planner pick any of the arm's many IK solutions. Tried in
+// order, each result checked densely for collisions before it runs (the shelf boards are 2 cm thick):
+//   1. Pilz PTP: the straight line in joint space - the shortest motion, when nothing is in the way
+//   2. two straight lines through "home" (up and back): clears the shelf's board edges with an object in the hand
+//   3. STOMP: bends the straight line around obstacles (smooth, but only a local fix)
+//   4. OMPL RRTConnect: sampling-based, for whatever is left
 class MoveToJoints : public Leaf
 {
 public:
   using Leaf::Leaf;
+  using Plan = moveit::planning_interface::MoveGroupInterface::Plan;
   static BT::PortsList providedPorts()
   {
-    return {InputPort<std::string>("pose", "named joint pose: home | look"),
-            InputPort<int>("attempts", 3, "planning attempts")};
+    return {InputPort<std::string>("pose", "", "named joint pose: home | look"),
+            InputPort<Joints>("joints", "joint target (when no name is given)")};
   }
   NodeStatus tick() override
   {
     const auto name = in<std::string>("pose");
-    const auto it = ctx_->named_joints.find(name);
-    if (it == ctx_->named_joints.end()) {
-      return fail("unknown joint pose " + name);
+    Joints q;
+    if (!name.empty()) {
+      const auto it = ctx_->named_joints.find(name);
+      if (it == ctx_->named_joints.end()) {
+        return fail("unknown joint pose " + name);
+      }
+      q = it->second;
+    } else {
+      q = in<Joints>("joints");
     }
     ctx_->wait_settled();
-    moveit::planning_interface::MoveGroupInterface::Plan plan;
-    bool ok = false;
-    for (int k = 0; k < in<int>("attempts") && !ok; ++k) {
-      ctx_->start_from_current_state();
-      ctx_->arm->setJointValueTarget(it->second);
-      ctx_->arm->setMaxVelocityScalingFactor(ctx_->free_scaling());
-      ctx_->arm->setMaxAccelerationScalingFactor(ctx_->free_scaling());
-      ok = ctx_->arm->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS;
-    }
-    if (!ok) {
-      return fail("no plan to " + name);
-    }
-    if (ctx_->arm->execute(plan) != moveit::core::MoveItErrorCode::SUCCESS) {
-      return fail("execution to " + name + " failed");
-    }
-    RCLCPP_INFO(log(), "at %s", name.c_str());
-    return NodeStatus::SUCCESS;
-  }
-};
+    ctx_->arm->setMaxVelocityScalingFactor(ctx_->free_scaling());
+    ctx_->arm->setMaxAccelerationScalingFactor(ctx_->free_scaling());
+    const auto & home = ctx_->named_joints.at("home");
 
-// Free-space motion (OMPL) to a TCP pose. Planning is retried: MoveIt's final check can reject an OMPL path
-// whose interpolation clips an obstacle (tight shelf, held object), and a fresh attempt usually finds another.
-class MoveToPose : public Leaf
-{
-public:
-  using Leaf::Leaf;
-  static BT::PortsList providedPorts()
-  {
-    return {InputPort<Pose>("pose", "TCP goal, base frame"), InputPort<int>("attempts", 3, "planning attempts")};
-  }
-  NodeStatus tick() override
-  {
-    const auto goal = ctx_->tcp_to_flange(in<Pose>("pose"));
-    ctx_->wait_settled();
-    moveit::planning_interface::MoveGroupInterface::Plan plan;
-    bool ok = false;
-    for (int k = 0; k < in<int>("attempts") && !ok; ++k) {
-      ctx_->start_from_current_state();
-      ctx_->arm->setPoseTarget(goal, ctx_->flange);
-      ctx_->arm->setMaxVelocityScalingFactor(ctx_->free_scaling());
-      ctx_->arm->setMaxAccelerationScalingFactor(ctx_->free_scaling());
-      ok = ctx_->arm->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS;
+    std::string how;
+    double travel = 0.0;
+    std::optional<std::pair<bool, double>> p;   // (executed ok, joint travel) of the last leg
+    if ((p = plan("PTP", q))) {
+      how = "PTP";
+      travel = p->second;
+    } else if (q != home && via_home_clear(q) && (p = plan("PTP", home))) {
+      how = "PTP via home";
+      travel = p->second;
+      if (!p->first) {
+        return fail("execution failed");
+      }
+      ctx_->wait_settled();
+      p = plan("PTP", q);   // from where the arm really stopped (a few mrad off home)
+      if (!p) {
+        return fail("no straight line on from home");
+      }
+      travel += p->second;
+    } else if ((p = plan("stomp", q, 2))) {
+      how = "STOMP";
+      travel = p->second;
+    } else if ((p = plan("RRTConnectkConfigDefault", q, 3))) {
+      how = "RRTConnect";
+      travel = p->second;
+    } else {
+      return fail("no plan to " + (name.empty() ? std::string("joint target") : name));
     }
-    ctx_->arm->clearPoseTargets();
-    if (!ok) {
-      return fail("no plan to TCP pose");
-    }
-    if (ctx_->arm->execute(plan) != moveit::core::MoveItErrorCode::SUCCESS) {
+    if (!p->first) {
       return fail("execution failed");
     }
+    RCLCPP_INFO(log(), "at %s (%s, joint travel %.2f rad)", name.empty() ? "target" : name.c_str(), how.c_str(), travel);
     return NodeStatus::SUCCESS;
+  }
+
+private:
+  // Plan from the current state to q with one planner (retried `attempts` times) and, if the path is clear, execute
+  // it. -> (executed ok, joint travel), or nothing if no clear path was found.
+  std::optional<std::pair<bool, double>> plan(const std::string & planner, const Joints & q, int attempts = 1)
+  {
+    auto & arm = *ctx_->arm;
+    arm.setPlanningPipelineId(planner == "PTP" ? "pilz_industrial_motion_planner" : planner == "stomp" ? "stomp" : "ompl");
+    arm.setPlannerId(planner);
+    arm.setJointValueTarget(q);
+    moveit::planning_interface::MoveGroupInterface::Plan p;
+    for (int k = 0; k < attempts; ++k) {   // STOMP and RRTConnect are randomized: another try can succeed
+      ctx_->start_from_current_state();
+      if (arm.plan(p) == MoveItCode::SUCCESS && ctx_->path_clear(p.trajectory)) {
+        return std::make_pair(arm.execute(p) == MoveItCode::SUCCESS, joint_travel(p.trajectory));
+      }
+    }
+    return std::nullopt;
+  }
+
+  // Is the straight line home -> q clear? (Checked before leaving, so the arm doesn't go home for nothing.)
+  bool via_home_clear(const Joints & q)
+  {
+    auto & arm = *ctx_->arm;
+    auto at_home = *arm.getCurrentState(1.0);
+    at_home.setJointGroupPositions(arm.getName(), ctx_->named_joints.at("home"));
+    arm.setStartState(at_home);
+    arm.setPlanningPipelineId("pilz_industrial_motion_planner");
+    arm.setPlannerId("PTP");
+    arm.setJointValueTarget(q);
+    moveit::planning_interface::MoveGroupInterface::Plan p;
+    return arm.plan(p) == MoveItCode::SUCCESS && ctx_->path_clear(p.trajectory);
   }
 };
 
-// Straight-line TCP motion (approach, lift, retreat), collision-checked, slow.
+// Straight-line TCP motion (approach, lift, retreat), collision-checked every 5 mm, slow.
 class MoveLinear : public Leaf
 {
 public:
@@ -158,23 +214,16 @@ public:
     moveit_msgs::msg::RobotTrajectory traj;
     const double fraction = ctx_->arm->computeCartesianPath({goal.pose}, 0.005, traj, true);
     if (fraction < in<double>("min_fraction")) {
-      const auto contacts = fraction < 0.1 ? ctx_->current_contacts() : "";
-      return fail("only " + std::to_string(int(fraction * 100)) + "% of the straight line is feasible" +
-                  (contacts.empty() ? "" : " (start state collides: " + contacts + ")"));
+      return fail("only " + std::to_string(int(fraction * 100)) + "% of the straight line is feasible");
     }
-    // re-time slower than free-space motions
-    robot_trajectory::RobotTrajectory rt(ctx_->arm->getRobotModel(), ctx_->arm->getName());
+    robot_trajectory::RobotTrajectory rt(ctx_->arm->getRobotModel(), ctx_->arm->getName());   // re-time: slower
     rt.setRobotTrajectoryMsg(*ctx_->arm->getCurrentState(), traj);
     trajectory_processing::TimeOptimalTrajectoryGeneration totg;
     totg.computeTimeStamps(rt, ctx_->linear_velocity_scaling, ctx_->linear_velocity_scaling);
     rt.getRobotTrajectoryMsg(traj);
-    if (ctx_->arm->execute(traj) != moveit::core::MoveItErrorCode::SUCCESS) {
+    if (ctx_->arm->execute(traj) != MoveItCode::SUCCESS) {
       return fail("execution failed");
     }
-    ctx_->wait_settled();
-    const Eigen::Isometry3d want = to_eigen(in<Pose>("pose").pose), got = ctx_->current_tcp();
-    RCLCPP_INFO(log(), "TCP at (%.3f, %.3f, %.3f), %.1f mm from the goal", got.translation().x(),
-                got.translation().y(), got.translation().z(), 1000 * (got.translation() - want.translation()).norm());
     return NodeStatus::SUCCESS;
   }
 };
@@ -186,9 +235,7 @@ public:
   using Leaf::Leaf;
   static BT::PortsList providedPorts()
   {
-    return {InputPort<double>("position", "one finger's opening (m): 0.04 open, 0 closed"),
-            InputPort<double>("max_effort", 70.0, "N"),
-            InputPort<double>("settle_time", 0.5, "s without finger motion = done")};
+    return {InputPort<double>("position", "one finger's opening (m): 0.04 open, 0 closed")};
   }
   NodeStatus tick() override
   {
@@ -198,16 +245,15 @@ public:
     }
     GC::Goal goal;
     goal.command.position = in<double>("position");
-    goal.command.max_effort = in<double>("max_effort");
+    goal.command.max_effort = ctx_->gripper_effort;
     auto gh = ctx_->gripper->async_send_goal(goal);
     if (gh.wait_for(std::chrono::seconds(5)) != std::future_status::ready || !gh.get()) {
       return fail("gripper goal rejected");
     }
-    // Done when the controller reports a result, or when the finger has stopped moving (closed on an object).
-    // Isaac reports a nonzero finger velocity while the finger is blocked, so the controller's own stall check
-    // never fires there (I-019); the goal stays active, so the fingers keep squeezing until the next command.
+    // Done when the controller reports a result, or when the finger has stopped for 0.5 s (closed on an object:
+    // Isaac reports finger velocity while blocked, so the controller never sees the stall, I-019). The goal stays
+    // active, so the fingers keep squeezing until the next command.
     auto res = ctx_->gripper->async_get_result(gh.get());
-    const double settle = in<double>("settle_time");
     auto clock = ctx_->node->get_clock();
     const auto start = clock->now();
     auto last_move = start;
@@ -218,17 +264,14 @@ public:
       if (std::abs(pos - last_pos) > 2e-4) {
         last_pos = pos;
         last_move = now;
-      } else if ((now - last_move).seconds() > settle && (now - start).seconds() > settle) {
-        RCLCPP_INFO(log(), "finger stopped at %.4f m (commanded %.4f)", pos, goal.command.position);
-        return NodeStatus::SUCCESS;
+      } else if ((now - last_move).seconds() > 0.5) {
+        break;
       }
       if ((now - start).seconds() > 15.0) {
         return fail("gripper timed out");
       }
     }
-    const auto r = res.get();
-    RCLCPP_INFO(log(), "finger at %.4f m (%s)", r.result->position,
-                r.result->reached_goal ? "reached" : r.result->stalled ? "stalled on something" : "?");
+    RCLCPP_INFO(log(), "finger at %.4f m (commanded %.4f)", ctx_->finger_position(), goal.command.position);
     return NodeStatus::SUCCESS;
   }
 };
@@ -238,23 +281,17 @@ class CheckGrasp : public Leaf
 {
 public:
   using Leaf::Leaf;
-  static BT::PortsList providedPorts()
-  {
-    return {InputPort<double>("min_opening", 0.003, "one finger (m); less = closed on nothing"),
-            InputPort<double>("max_opening", 0.037, "one finger (m); more = hand open"),
-            OutputPort<double>("width")};
-  }
+  static BT::PortsList providedPorts() { return {}; }
   NodeStatus tick() override
   {
-    const double f = ctx_->finger_position();
-    setOutput("width", 2 * f);
-    if (f < in<double>("min_opening")) {
-      return fail("fingers closed on nothing (" + std::to_string(f * 1000) + " mm)");
+    const double w = ctx_->opening();
+    if (w < 0.006) {
+      return fail("fingers closed on nothing");
     }
-    if (f > in<double>("max_opening")) {
+    if (w > 0.074) {
       return fail("hand open, nothing held");
     }
-    RCLCPP_INFO(log(), "holding something %.1f mm wide", 2000 * f);
+    RCLCPP_INFO(log(), "holding something %.1f mm wide", 1000 * w);
     return NodeStatus::SUCCESS;
   }
 };
@@ -264,10 +301,7 @@ class EstimatePose : public Leaf
 {
 public:
   using Leaf::Leaf;
-  static BT::PortsList providedPorts()
-  {
-    return {InputPort<std::string>("target"), OutputPort<Pose>("object_pose")};
-  }
+  static BT::PortsList providedPorts() { return {InputPort<std::string>("target"), OutputPort<Pose>("object_pose")}; }
   NodeStatus tick() override
   {
     auto req = std::make_shared<ppp_interfaces::srv::EstimatePose::Request>();
@@ -313,16 +347,13 @@ public:
   using Leaf::Leaf;
   static BT::PortsList providedPorts()
   {
-    return {InputPort<std::string>("target"), InputPort<Pose>("object_pose", "as it stood on the table (pick time)"),
-            InputPort<bool>("rest_poses", true, "every stable rest pose (upright first), else only the table one"),
-            OutputPort<PlacementQueue>("placements"), OutputPort<sensor_msgs::msg::PointCloud2>("obstacles")};
+    return {InputPort<std::string>("target"), OutputPort<PlacementQueue>("placements"),
+            OutputPort<sensor_msgs::msg::PointCloud2>("obstacles")};
   }
   NodeStatus tick() override
   {
     auto req = std::make_shared<ppp_interfaces::srv::GetPlacements::Request>();
     req->target = in<std::string>("target");
-    req->object_orientation = in<Pose>("object_pose").pose.orientation;
-    req->rest_poses = in<bool>("rest_poses");
     // a wrist frame taken after the arm stopped (the last motion's execute() returned just now)
     req->not_before = (ctx_->node->now() + rclcpp::Duration::from_seconds(0.2)).operator builtin_interfaces::msg::Time();
     auto res = ctx_->call<ppp_interfaces::srv::GetPlacements>(ctx_->get_placements, req, 30.0);
@@ -336,189 +367,168 @@ public:
   }
 };
 
-// One way to do the whole job: a grasp, where to put the object down, and every TCP pose on the way.
+// One way to do the whole job: a grasp, where the object goes down, the TCP poses of the straight-line moves and
+// the joint configurations of the free-space moves (all from one chain of IK solutions, so they fit together).
 struct PickPlacePlan
 {
   Grasp grasp;
   Placement placement;
-  Pose pregrasp, grasp_pose, lifted, preplace, place, depart;   // depart: backed off along the gripper axis
-  std::string approach;   // how the object goes in: "inline" (along the gripper axis), "above", "front"
-  double yaw = 0.0;       // rest pose turned about vertical (rad)
+  Pose grasp_pose, lifted, place, depart, pregrasp;   // TCP poses (base frame); depart: backed off after release
+  Joints pregrasp_q, lifted_q, preplace_q;
+  std::string approach;                               // how the object goes in: "inline", "above", "front"
 };
 using PlanQueue = BT::SharedQueue<PickPlacePlan>;
 
-// Grasps x placements -> plans whose every pose has a collision-free IK solution (MoveIt /compute_ik; the held
-// mesh is on the hand from the lift on). Placements best first; for each, grasps least tilted first. The object
-// is set down in the rest pose it had on the table, turned about vertical so that a side grasp points from the
-// robot towards the place point (into the shelf). Motions between the poses are planned only when executed.
+// Grasps x placements -> plans whose every pose has a collision-free IK solution (the held mesh on the hand from
+// the lift on). IK returns the solution nearest its seed (pick_ik): free-space goals are seeded with where the arm
+// comes from, turned towards the goal (home for the pregrasp, the lift for the preplace); straight-line goals with
+// the pose before, and must stay within kLineJump of it. So the arm keeps one natural configuration throughout.
+// Placements in stage 5's order (upright first, then most room); for each, grasps least tilted first. The object
+// is set down in the placement's rest pose, turned about vertical so that a side grasp points from the robot into
+// the shelf (otherwise quarter turns are tried).
 class SelectPlans : public Leaf
 {
 public:
   using Leaf::Leaf;
   static BT::PortsList providedPorts()
   {
-    return {InputPort<std::string>("target"), InputPort<Pose>("object_pose"), InputPort<GraspQueue>("grasps"),
-            InputPort<PlacementQueue>("placements"),
-            InputPort<double>("drop_gap", 0.01, "m above the support when released"),
-            InputPort<double>("approach", 0.10, "m: preplace distance"),
-            InputPort<double>("pregrasp", 0.06, "m: pregrasp distance (short: neighbours on the table)"),
-            InputPort<double>("lift", 0.12, "m"), InputPort<int>("max_plans", 4, "stop after this many"),
-            InputPort<double>("depart", 0.06, "m: after release, back off along the gripper axis first"),
-            OutputPort<PlanQueue>("plans")};
+    return {InputPort<std::string>("target"), InputPort<GraspQueue>("grasps"),
+            InputPort<PlacementQueue>("placements"), OutputPort<PlanQueue>("plans")};
   }
   NodeStatus tick() override
   {
+    constexpr double kPregrasp = 0.10;   // m back from the grasp along the approach
+    constexpr double kLift = 0.18;       // m straight up after closing: room to turn a tall object over the table
+    constexpr double kPreplace = 0.12;   // m from the place pose
+    constexpr double kDropGap = 0.01;    // m above the support when released
+    constexpr double kDepart = 0.06;     // m back along the gripper axis after releasing
+    constexpr std::size_t kMaxPlans = 4;
+    constexpr double kLineJump = 0.8;    // rad, any joint: along a straight-line move the arm barely changes
     const auto target = in<std::string>("target");
-    (void)in<Pose>("object_pose");
     const auto grasps = in<GraspQueue>("grasps");
     const auto placements = in<PlacementQueue>("placements");
-    const double gap = in<double>("drop_gap"), a = in<double>("approach");
-    const double lift = in<double>("lift"), pregrasp = in<double>("pregrasp"), depart = in<double>("depart");
-    const auto max_plans = static_cast<std::size_t>(in<int>("max_plans"));
-    auto plans = std::make_shared<std::deque<PickPlacePlan>>();
-    int checked = 0;
+    const auto & home = ctx_->named_joints.at("home");
     const auto t0 = std::chrono::steady_clock::now();
 
-    // the pick half depends only on the grasp: check it once per grasp
-    std::vector<std::optional<moveit_msgs::msg::AttachedCollisionObject>> held(grasps->size());
-    std::vector<int> pick_ok(grasps->size(), -1);
-    reported_.assign(grasps->size(), false);
+    struct Pick
+    {
+      bool checked = false;
+      std::optional<Held> held;
+      std::optional<Joints> pre, at, up;
+    };
+    std::vector<Pick> picks(grasps->size());   // the pick half depends only on the grasp: once per grasp
+    int no_pick = 0, no_place = 0;
+    auto plans = std::make_shared<std::deque<PickPlacePlan>>();
     for (const auto & pl : *placements) {
       const Eigen::Vector3d p(pl.point.point.x, pl.point.point.y, pl.point.point.z);
       const Eigen::Vector2d into = p.head<2>().normalized();   // from the robot towards the place point
-      for (std::size_t gi = 0; gi < grasps->size() && plans->size() < max_plans; ++gi) {
+      for (std::size_t gi = 0; gi < grasps->size() && plans->size() < kMaxPlans; ++gi) {
         const auto & g = (*grasps)[gi];
-        const Eigen::Isometry3d T_obj_tcp = to_eigen(g.tcp_in_object);
-        const Eigen::Isometry3d tcp0 = to_eigen(g.tcp.pose);
+        const Eigen::Isometry3d T_obj_tcp = to_eigen(g.tcp_in_object), tcp0 = to_eigen(g.tcp.pose);
         Eigen::Isometry3d pre0 = tcp0, up0 = tcp0;
-        pre0.translation() -= pregrasp * tcp0.linear().col(2);
-        up0.translation().z() += lift;
-        if (pick_ok[gi] < 0) {
-          held[gi] = ctx_->held_object(target, T_obj_tcp);
-          pick_ok[gi] = held[gi] && ctx_->reachable(pre0, nullptr) && ctx_->reachable(tcp0, nullptr) &&
-                        ctx_->reachable(up0, &*held[gi]);
-          checked += 3;
+        pre0.translation() -= kPregrasp * tcp0.linear().col(2);
+        up0.translation().z() += kLift;
+        auto & pk = picks[gi];
+        if (!pk.checked) {
+          pk.checked = true;
+          pk.held = ctx_->held_object(target, T_obj_tcp);
+          pk.pre = ctx_->ik(pre0, aim(home, pre0), nullptr);
+          pk.at = pk.pre ? ctx_->ik(tcp0, *pk.pre, nullptr, kLineJump) : std::nullopt;
+          pk.up = pk.at && pk.held ? ctx_->ik(up0, *pk.at, &*pk.held, kLineJump) : std::nullopt;
+          no_pick += !pk.up;
         }
-        if (!pick_ok[gi]) {
-          if (pick_ok[gi] == 0 && !reported_[gi]) {
-            const bool pre = ctx_->reachable(pre0, nullptr), at = pre && ctx_->reachable(tcp0, nullptr);
-            const std::string which = !pre ? "pregrasp" : !at ? "grasp" : "lift";
-            const auto & bad = !pre ? pre0 : !at ? tcp0 : up0;
-            RCLCPP_INFO(log(), "  grasp %zu %s (tilt %.0f deg): %s not reachable: %s", gi, g.face.c_str(),
-                        g.tilt * 180 / M_PI, which.c_str(),
-                        ctx_->why_unreachable(bad, which == "lift" && held[gi] ? &*held[gi] : nullptr).c_str());
-            reported_[gi] = true;
-          }
+        if (!pk.up) {
           continue;
         }
-        // the object goes down in this placement's rest pose, turned about vertical: a side grasp is turned to
-        // point from the robot into the shelf; otherwise four quarter turns are tried
-        const Eigen::Quaterniond q_rest(pl.orientation.w, pl.orientation.x, pl.orientation.y, pl.orientation.z);
-        const Eigen::Matrix3d R_rest = q_rest.toRotationMatrix();
+        const Eigen::Matrix3d R_rest =
+          Eigen::Quaterniond(pl.orientation.w, pl.orientation.x, pl.orientation.y, pl.orientation.z).toRotationMatrix();
         const Eigen::Vector3d z_rest = R_rest * T_obj_tcp.linear().col(2);   // approach, rest pose at yaw 0
-        std::vector<double> yaws;
-        if (z_rest.head<2>().norm() > 0.5) {
+        std::vector<double> yaws = {0.0, M_PI / 2, M_PI, -M_PI / 2};
+        if (z_rest.head<2>().norm() > 0.5) {   // side grasp: point it into the shelf
           yaws = {std::atan2(into.y(), into.x()) - std::atan2(z_rest.y(), z_rest.x())};
-        } else {
-          yaws = {0.0, M_PI / 2, M_PI, -M_PI / 2};
         }
-        bool found = false;
-        for (const double yaw : yaws) {
+        std::optional<PickPlacePlan> plan;
+        for (std::size_t k = 0; k < yaws.size() && !plan; ++k) {
           Eigen::Isometry3d T_obj = Eigen::Isometry3d::Identity();
-          T_obj.linear() = Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()) * R_rest;
-          T_obj.translation() = p + Eigen::Vector3d(0, 0, pl.object_bottom + gap);
+          T_obj.linear() = Eigen::AngleAxisd(yaws[k], Eigen::Vector3d::UnitZ()) * R_rest;
+          T_obj.translation() = p + Eigen::Vector3d(0, 0, pl.object_bottom + kDropGap);
           const Eigen::Isometry3d place = T_obj * T_obj_tcp;
           const Eigen::Vector3d zp = place.linear().col(2);
           Eigen::Isometry3d inl = place, above = place, front = place, dep = place;
-          dep.translation() -= depart * zp;
-          inl.translation() -= a * zp;
-          above.translation().z() += a;
-          front.translation().head<2>() -= a * into;
-          ++checked;
-          if (!ctx_->reachable(place, &*held[gi])) {
-            continue;
-          }
-          for (const auto & [name, pre] : std::vector<std::pair<std::string, Eigen::Isometry3d>>{
-                 {"inline", inl}, {"above", above}, {"front", front}}) {
-            ++checked;
-            if (ctx_->reachable(pre, &*held[gi])) {
-              plans->push_back(PickPlacePlan{g, pl, to_msg(pre0, ctx_->base_frame), to_msg(tcp0, ctx_->base_frame),
-                                             to_msg(up0, ctx_->base_frame), to_msg(pre, ctx_->base_frame),
-                                             to_msg(place, ctx_->base_frame), to_msg(dep, ctx_->base_frame), name, yaw});
-              RCLCPP_INFO(log(), "plan %zu: grasp %s (tilt %.0f deg) -> %s at (%.3f, %.3f) on z %.2f, in %s, yaw %.0f deg",
-                          plans->size(), g.face.c_str(), g.tilt * 180 / M_PI, pl.rest_pose.c_str(), p.x(), p.y(),
-                          p.z(), name.c_str(), yaw * 180 / M_PI);
-              found = true;
+          inl.translation() -= kPreplace * zp;
+          above.translation().z() += kPreplace;
+          front.translation().head<2>() -= kPreplace * into;
+          dep.translation() -= kDepart * zp;
+          const std::vector<std::pair<std::string, Eigen::Isometry3d>> approaches = {
+            {"inline", inl}, {"above", above}, {"front", front}};
+          for (const auto & [name, pre] : approaches) {
+            const auto pre_q = ctx_->ik(pre, aim(*pk.up, pre), &*pk.held);
+            if (pre_q && ctx_->ik(place, *pre_q, &*pk.held, kLineJump)) {
+              const auto & F = ctx_->base_frame;
+              plan = PickPlacePlan{g, pl, to_msg(tcp0, F), to_msg(up0, F), to_msg(place, F), to_msg(dep, F),
+                                   to_msg(pre0, F), *pk.pre, *pk.up, *pre_q, name};
               break;
             }
           }
-          if (found) {
-            break;
-          }
         }
-        if (!found) {
-          Eigen::Isometry3d T_obj = Eigen::Isometry3d::Identity();   // explain the first yaw tried
-          T_obj.linear() = Eigen::AngleAxisd(yaws[0], Eigen::Vector3d::UnitZ()) * R_rest;
-          T_obj.translation() = p + Eigen::Vector3d(0, 0, pl.object_bottom + gap);
-          RCLCPP_INFO(log(), "  grasp %zu %s -> %s at (%.3f, %.3f) on z %.2f: place not reachable (%s)", gi,
-                      g.face.c_str(), pl.rest_pose.c_str(), p.x(), p.y(), p.z(),
-                      ctx_->why_unreachable(T_obj * T_obj_tcp, &*held[gi]).c_str());
+        if (!plan) {
+          ++no_place;
+          continue;
         }
+        plans->push_back(*plan);
+        RCLCPP_INFO(log(), "plan %zu: grasp %s (tilt %.0f deg) -> %s at (%.3f, %.3f) on z %.2f, in %s",
+                    plans->size(), g.face.c_str(), g.tilt * 180 / M_PI, pl.rest_pose.c_str(), p.x(), p.y(), p.z(),
+                    plan->approach.c_str());
       }
     }
     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    RCLCPP_INFO(log(), "%zu plans from %zu grasps x %zu placements (%d grasps unreachable, %d grasp-placement pairs "
+                "unreachable at the shelf, %.0f ms)", plans->size(), grasps->size(), placements->size(), no_pick,
+                no_place, ms);
     if (plans->empty()) {
-      return fail("no grasp + placement with reachable poses (" + std::to_string(checked) + " IK checks)");
+      return fail("no grasp + placement with reachable poses");
     }
-    RCLCPP_INFO(log(), "%zu plans from %zu grasps x %zu placements (%d IK checks, %.0f ms)", plans->size(),
-                grasps->size(), placements->size(), checked, ms);
     setOutput("plans", plans);
     return NodeStatus::SUCCESS;
   }
-
-private:
-  std::vector<bool> reported_;
 };
 
-// Next plan; with same_grasp=true only plans using the grasp already taken (the object is in the hand).
+// Next plan from the queue.
 class PopPlan : public Leaf
 {
 public:
   using Leaf::Leaf;
   static BT::PortsList providedPorts()
   {
-    return {BT::BidirectionalPort<PlanQueue>("plans"), InputPort<bool>("same_grasp", false, "only plans with the grasp in hand"),
-            BT::BidirectionalPort<Grasp>("grasp"), OutputPort<Pose>("pregrasp"), OutputPort<Pose>("grasp_pose"),
-            OutputPort<Pose>("lifted"), OutputPort<Pose>("preplace"), OutputPort<Pose>("place"),
-            OutputPort<Pose>("depart")};
+    return {BT::BidirectionalPort<PlanQueue>("plans"), OutputPort<Grasp>("grasp"), OutputPort<Pose>("grasp_pose"),
+            OutputPort<Pose>("lifted"), OutputPort<Pose>("place"), OutputPort<Pose>("depart"),
+            OutputPort<Pose>("pregrasp"), OutputPort<Joints>("pregrasp_q"), OutputPort<Joints>("lifted_q"),
+            OutputPort<Joints>("preplace_q")};
   }
   NodeStatus tick() override
   {
     auto q = in<PlanQueue>("plans");
-    const bool same = in<bool>("same_grasp");
-    Grasp taken;
-    if (same) {
-      taken = in<Grasp>("grasp");
+    if (!q || q->empty()) {
+      return fail("no plan left");
     }
-    while (q && !q->empty()) {
-      const PickPlacePlan pp = q->front();
-      q->pop_front();
-      if (same && (pp.grasp.face != taken.face || pp.grasp.tcp.pose != taken.tcp.pose)) {
-        continue;
-      }
-      setOutput("grasp", pp.grasp);
-      setOutput("pregrasp", pp.pregrasp);
-      setOutput("grasp_pose", pp.grasp_pose);
-      setOutput("lifted", pp.lifted);
-      setOutput("preplace", pp.preplace);
-      setOutput("place", pp.place);
-      setOutput("depart", pp.depart);
-      RCLCPP_INFO(log(), "plan: grasp %s, place at (%.3f, %.3f) on z %.2f, in %s (%zu left)", pp.grasp.face.c_str(),
-                  pp.placement.point.point.x, pp.placement.point.point.y, pp.placement.point.point.z,
-                  pp.approach.c_str(), q->size());
-      return NodeStatus::SUCCESS;
-    }
-    return fail(same ? "no other placement for the grasp in hand" : "no plan left");
+    const PickPlacePlan pp = q->front();
+    q->pop_front();
+    setOutput("grasp", pp.grasp);
+    setOutput("grasp_pose", pp.grasp_pose);
+    setOutput("lifted", pp.lifted);
+    setOutput("place", pp.place);
+    setOutput("depart", pp.depart);
+    setOutput("pregrasp", pp.pregrasp);
+    setOutput("pregrasp_q", pp.pregrasp_q);
+    setOutput("lifted_q", pp.lifted_q);
+    setOutput("preplace_q", pp.preplace_q);
+    // for viewers: the object pose once set down = hand at place x (grasp seen from the object)^-1
+    ctx_->place_goal_pub->publish(to_msg(to_eigen(pp.place.pose) * to_eigen(pp.grasp.tcp_in_object).inverse(),
+                                         pp.place.header.frame_id));
+    RCLCPP_INFO(log(), "plan: grasp %s, place at (%.3f, %.3f) on z %.2f, in %s (%zu left)", pp.grasp.face.c_str(),
+                pp.placement.point.point.x, pp.placement.point.point.y, pp.placement.point.point.z,
+                pp.approach.c_str(), q->size());
+    return NodeStatus::SUCCESS;
   }
 };
 
@@ -531,14 +541,13 @@ public:
   using Leaf::Leaf;
   static BT::PortsList providedPorts()
   {
-    return {InputPort<sensor_msgs::msg::PointCloud2>("obstacles"), InputPort<std::string>("id", "table_clutter", "object id"),
-            InputPort<double>("voxel", 0.025, "m"),
-            InputPort<int>("min_points", 4, "points per voxel (drops flying pixels)")};
+    return {InputPort<sensor_msgs::msg::PointCloud2>("obstacles"), InputPort<std::string>("id", "object id")};
   }
   NodeStatus tick() override
   {
+    constexpr double v = 0.025;   // voxel size (m)
+    constexpr int kMinPoints = 4;   // per voxel: drops flying pixels
     const auto cloud = in<sensor_msgs::msg::PointCloud2>("obstacles");
-    const double v = in<double>("voxel");
     std::map<std::tuple<int, int, int>, int> cells;
     for (sensor_msgs::PointCloud2ConstIterator<float> it(cloud, "x"); it != it.end(); ++it) {
       ++cells[{int(std::floor(it[0] / v)), int(std::floor(it[1] / v)), int(std::floor(it[2] / v))}];
@@ -549,7 +558,7 @@ public:
     clutter.operation = moveit_msgs::msg::CollisionObject::ADD;
     clutter.pose.orientation.w = 1.0;
     for (const auto & [c, n] : cells) {
-      if (n < in<int>("min_points")) {
+      if (n < kMinPoints) {
         continue;
       }
       shape_msgs::msg::SolidPrimitive box;
@@ -609,7 +618,8 @@ public:
   }
 };
 
-// The held object (its mesh) rides on the hand, so MoveIt keeps it clear of the shelf.
+// The held object becomes part of the robot for planning: its mesh rides on panda_hand, so every IK, plan and
+// collision check (shelf, clutter, the robot itself) includes it.
 class AttachObject : public Leaf
 {
 public:
@@ -623,7 +633,6 @@ public:
       return fail("attach failed");
     }
     ctx_->carrying = true;
-    RCLCPP_INFO(log(), "%s attached to the hand", target.c_str());
     return NodeStatus::SUCCESS;
   }
 };
@@ -637,7 +646,7 @@ public:
   NodeStatus tick() override
   {
     const std::string id = "held_" + in<std::string>("target");
-    moveit_msgs::msg::AttachedCollisionObject aco;
+    Held aco;
     aco.link_name = "panda_hand";
     aco.object.id = id;
     aco.object.operation = moveit_msgs::msg::CollisionObject::REMOVE;
@@ -658,7 +667,6 @@ void reg(BT::BehaviorTreeFactory & f, const std::string & id, const std::shared_
 void register_nodes(BT::BehaviorTreeFactory & f, const std::shared_ptr<Context> & ctx)
 {
   reg<MoveToJoints>(f, "MoveToJoints", ctx);
-  reg<MoveToPose>(f, "MoveToPose", ctx);
   reg<MoveLinear>(f, "MoveLinear", ctx);
   reg<Gripper>(f, "Gripper", ctx);
   reg<CheckGrasp>(f, "CheckGrasp", ctx);

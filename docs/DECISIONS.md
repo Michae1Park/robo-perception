@@ -45,6 +45,15 @@ along the way. Newest entries go at the bottom of each list.
 | [D-030](#d-030) | 2026-09-30 | Recovery never drops an object somewhere random | Accepted |
 | [D-031](#d-031) | 2026-09-30 | Place in the most natural stable rest pose that fits: upright first (supersedes the orientation rule of D-024) | Accepted |
 | [D-032](#d-032) | 2026-09-30 | `ros_cell.py --livestream`: watch the live ROS cell in the WebRTC client | Accepted |
+| [D-033](#d-033) | 2026-09-30 | Re-lay out the cell so the arm has clearance for clean paths | Superseded by D-035 (built) |
+| [D-034](#d-034) | 2026-09-30 | Draw pose estimates and placements in the sim viewport | Accepted |
+| [D-035](#d-035) | 2026-09-30 | New cell layout from the Panda's reach: bigger shelf, objects 0.5–0.7 m out, home facing between table and shelf | Accepted |
+| [D-036](#d-036) | 2026-09-30 | Fingers 5 cm longer, 140 N squeeze (supersedes the gripper part of D-026) | Accepted |
+| [D-037](#d-037) | 2026-09-30 | Clean motions: pick_ik, chained IK to joint targets, straight joint-space lines first, dense collision checks | Accepted |
+| [D-038](#d-038) | 2026-09-30 | Keep only the necessary safety / reliability logic in the task | Accepted |
+| [D-039](#d-039) | 2026-09-30 | Vision reliability: vision nodes detect and report, the behavior tree decides | Proposed |
+| [D-040](#d-040) | 2026-09-30 | Shelf stays at its D-035 distance; STOMP joins the planners after "via home" | Accepted |
+| [D-041](#d-041) | 2026-09-30 | Floor-standing metal pantry, long narrow table, fixed camera re-aimed | Accepted |
 
 ### D-001
 **Keep YOLOE-seg (not OWLv2 + SAM2).** One `ultralytics` model gives box + mask in a single pass and was
@@ -265,6 +274,135 @@ for unfamiliar objects (e.g. keep containers of liquid upright).
 watched in the Isaac Sim WebRTC Streaming Client while the whole ROS pipeline runs (I-013 turned out not to
 apply). Foxglove (D-017) stays the way to see ROS data: detections, planned paths, TF.
 
+### D-033
+**Re-lay out the cell for clearance.** Motions in the live run look contorted, and the 8-episode baseline is can
+6/8, mustard 3/8. Suspected causes in the current layout (`config.yaml` `sim:`):
+- The table's near edge is 0.20 m from the base, and objects sit 0.33–0.72 m out. Top-down grasps close to the base
+  fold joint 4 hard.
+- The shelf is 0.43 m to the side (near edge) at board heights 0 / 0.32 / 0.64 m. The low board is cramped under
+  the arm, and the top one is near the reach limit once the hand is inside the shelf.
+- Table → shelf is a 90° swing of joint 1 with the object held low, next to the table.
+
+Plan: (1) log which motions fail or wind up in the baseline (`sim/episodes.py -n 10`); (2) move the table and
+objects about 0.10 m further out, and the shelf to about 0.5–0.6 m from the base, possibly angled towards the
+table; (3) regenerate what depends on the layout: `config/calibration.yaml` (`sim/write_calibration.py`),
+`look_joints` (IK), the overview camera and figures; (4) re-run 10 episodes and compare.
+
+### D-034
+**Overlay of the current target in the sim viewport** (`ros_cell.py`, `isaacsim.util.debug_draw`, so it shows in the
+WebRTC stream too). Magenta: the object's box and axes at `/pose_node/pose`. Dim green: `/place_node/placements`
+candidates. Green: the object's box where the task will set it down (`/task_manager/place_goal`, published when a
+plan is taken). `/task_manager/target` (latched) announces each target and is set to "" when done, which clears the
+overlay. With no target announced, a pose is matched to the nearest sim object. Viewer only.
+
+### D-035
+**Cell layout from the Panda's reach** (supersedes the plan in D-033; config.yaml `sim:`, `robot:`). An IK scan of the
+Panda: top-down grasps have good joint margins 0.5–0.72 m from the base (at 0.3–0.4 m joint 4 folds up), horizontal
+placements with the hand 0.1–0.6 m high. So:
+
+| | Before | After |
+|---|---|---|
+| Table | near edge 0.20 m, objects 0.33–0.72 m out | near edge 0.35 m, targets 0.55–0.66 m out |
+| Shelf | 0.60 × 0.30 m, boards 0 / 0.32 / 0.64 m, 3 cm from the table corner | 0.80 × 0.35 m, boards 0.05 / 0.45 m (0.38 m gap, open top), 15 cm from the table |
+| Home | facing the table (joint 1 at 0) | facing between table and shelf (joint 1 at −45°) |
+
+The L-shape stays (table in front, shelf on the right). Rotating home by 45° is kinematically the same as rotating the
+pedestal (joint 1 has ±166°), and keeps base = world for calibration, planning scene and ground truth. The pedestal
+(20 cm, the Panda's own footprint) is a static collider, so its size and mass don't matter. The potted meat can left the
+scene: from the new camera position YOLOE took it for the tomato can in both runs (I-025).
+
+### D-036
+**Longer fingers, stronger squeeze** (`gripper.finger_extension`, `sim.gripper`). Each finger continues 5 cm past its
+tip as a box, pad face flush with the stock pad, in the sim (`sim/cell.py`) and in MoveIt's robot model
+(`ppp_bringup/launch/common.py`): TCP 0.1034 → 0.1534 m from the hand. The hand stays further from the object and the
+shelf, and grasps reach deeper (`gripper.finger_depth` 3 → 4.5 cm; at 3 cm a side grasp held the mustard by its
+thin edge and it slipped). The finger drive squeezes with up to 140 N (a real Franka Hand's peak; 70 N continuous),
+stiffness 6000 N/m. Under that load the mimic finger drifts: the task measures the grip as the sum of both fingers,
+and the articulation runs 64 solver iterations. A different hand (e.g. Robotiq 2F-140) was not needed.
+
+### D-037
+**Clean motions** (`ppp_task`, `launch/common.py`). The arm swung through odd configurations because MoveIt's default
+IK (KDL) restarts from random joint values: for one pregrasp it returned configurations 6–13 rad (summed over the
+joints) from home, while a natural one is 3.3 rad away (I-032). Now:
+
+| Piece | What |
+|---|---|
+| IK | **pick_ik** (global, least displacement from the seed): the solution nearest the seed |
+| Chained IK | `SelectPlans` seeds each pose with the one before (home → pregrasp → grasp → lift → preplace → place), joint 1 turned towards free-space goals; straight-line steps may not move any joint more than 0.8 rad |
+| Joint targets | Free-space moves go to those joint solutions, not to poses, so the planner can't choose another configuration |
+| Planner order | Straight line in joint space (Pilz PTP) → two straight lines through home → OMPL |
+| Collision checks | Straight lines checked every 0.02 rad against the planning scene (Pilz alone checks too sparsely for 2 cm boards); OMPL's segment check 10× finer than default |
+| Held object | Attached to the hand as its mesh padded by 5 mm, so every IK, plan and check includes it (the dynamic form of adding it to the URDF) |
+| Standoffs | Pregrasp 6 → 10 cm, preplace 10 → 12 cm, lift 12 → 18 cm: the straight lines arrive without sweeping the fingers through the object or a board |
+
+Result: moves of 2.6–5 rad as straight joint-space lines; ~10 rad via home when the direct line would sweep the held
+object through the shelf (before: OMPL detours of 10–15 rad). Of 97 free-space moves in 10 episodes, 75 were one
+straight line, 13 went via home, 9 needed OMPL.
+
+| 10 randomised episodes (`sim/episodes.py`) | Before (8 episodes, D-033) | After (D-035–D-037) |
+|---|---|---|
+| Mustard bottle placed | 3/8 | **10/10** |
+| Tomato can placed (stood upright) | 6/8 | **8/10** |
+| Task verdict = ground truth | 13/16 | 19/20 |
+
+The two can failures: not detected (I-025), and released on the top board's end but found off the shelf (I-037).
+
+### D-038
+**Only the necessary safety logic** (`trees/pick_and_place.xml`, `bt_nodes.cpp`). Removed: re-trying other placements
+with the object in hand, the grasp check right after closing (the one after the lift covers it), IK failure
+diagnostics, the trace logger, the `pose_service` stub hook, the table-rest-pose placement mode. Kept, because each
+fixed a real failure: grasp check after the lift and before release (D-030: no false "placed"), `Recover` putting a
+held object back (D-030), waiting for the arm to settle before planning (I-028), start-state clamping (I-028), the gripper's
+position-based stall (I-019), refusing a second sim (I-030), planning-scene cleanup before every target.
+
+### D-039
+**Vision reliability: detect in the vision nodes, decide in the behavior tree** (proposed). The checks need the
+images and models, so they belong where those are; what to do about a failure (look again from another angle, try
+another plan, give up) needs the task's context, so it belongs in the tree. Each vision service already returns
+`success` + a message; add a confidence and the reason:
+
+| Where | Check | Cheap? |
+|---|---|---|
+| `detect_node` | Mask big enough, most mask pixels have depth, visual + text score margin (D-025) | yes |
+| `pose_node` | The estimate agrees with the data: object bottom on the table plane (±2 cm), rendered silhouette vs mask IoU | yes / medium |
+| `pose_node` | Two estimates from consecutive frames agree (rotation < 5°, 5 mm) | one more FoundationPose pass |
+| `place_node` | At least one support at a plausible height; placements inside the wrist camera's view | yes |
+| Behavior tree | On a vision failure: re-detect once after a short wait, then look from a second camera pose, then skip the target | — |
+
+### D-040
+**Shelf distance and STOMP.** Asked to move the robot 30–50 cm further from the shelf and to consider RRT / CHOMP /
+STOMP. An IK scan (no collisions) keeps 85–100 % of shelf spots reachable up to +0.2 m, ~55 % at +0.3 m and almost none at
++0.4–0.5 m, so +0.2 and +0.1 m were tried, 10 randomised episodes each:
+
+| Shelf front from the base | Free-space planners, in order | Mustard | Tomato can |
+|---|---|---|---|
+| 0.47 m (D-035) | PTP → via home → OMPL RRTConnect | **10/10** | **8/10** |
+| 0.67 m | PTP → STOMP → RRTConnect | 5/10 | 5/10 |
+| 0.67 m | PTP → via home → STOMP → RRTConnect | 2/10 | 7/10 |
+| 0.57 m | PTP → via home → STOMP → RRTConnect | 3/4 | 2/4 (stopped after 4) |
+
+Further away, the tall bottle's placements drop out of comfortable reach (5 of 10 runs found no reachable grasp +
+placement pair) and carrying into the shelf clips the board edges. **The shelf stays at 0.47 m.** STOMP alone can't
+replace "via home": it only bends the direct line locally, and 7 carries found no plan without the detour through
+home. So the order is PTP → via home → STOMP → RRTConnect: straight line, straight lines through a hub pose, an
+optimizer, a sampler. RRTConnect is OMPL's bidirectional RRT. CHOMP was not added: like STOMP it optimizes the direct
+line, but needs a distance field of the scene. The four-planner order has not yet been re-measured at 0.47 m.
+
+### D-041
+**Metal pantry and a long, narrow table** (config.yaml `sim:`; boxes shared by the sim and MoveIt: `vision.shelf_boxes`).
+
+| | Before (D-035) | After |
+|---|---|---|
+| Shelf | 2 boards (0.05 / 0.45 m), side and back panels, open top | Pantry 2.05 m tall: 4 corner posts, boards at −0.35 / 0.05 / 0.45 / 0.95 / 1.30 m, open back and sides, steel material |
+| Table | 0.55 × 0.80 m (x 0.35–0.90) | 0.40 × 0.95 m (x 0.40–0.80, y −0.30–0.65) |
+| Items | targets 0.55–0.66 m out | same distances; clutter re-spaced along the table |
+| Fixed camera | eye (1.07, 0.42, 0.50), ~0.75 m from the targets | eye (1.15, 0.32, 0.64), 0.85–0.95 m: all five items in view. Tripod legs turned away from the table |
+
+The 0.45 m board now has a board above it. With that board at 0.85 m (0.38 m clear), 2 of 4 episodes had no
+collision-free carry onto 0.45 (once each target); at 0.95 m (0.48 m clear), 3 episodes: **mustard 3/3, tomato can
+3/3**, with placements on both the 0.05 and the 0.45 board. The wrist camera's look pose is unchanged; it sees the
+0.05 and 0.45 boards, not the ones above.
+
 ## Issues
 
 | ID | Date | Issue | Status |
@@ -293,13 +431,19 @@ apply). Foxglove (D-017) stays the way to see ROS data: detections, planned path
 | [I-022](#i-022) | 2026-09-30 | Ubuntu's pybind11 2.11 segfaults with numpy 2 | Resolved |
 | [I-023](#i-023) | 2026-09-30 | ROS's launch_testing pytest plugin breaks the `.venv`'s pytest | Resolved |
 | [I-024](#i-024) | 2026-09-30 | FoundationPose sometimes flips the mustard bottle 180° about its axis | Noted |
-| [I-025](#i-025) | 2026-09-30 | Visual prompt confuses the tomato can with the potted meat can | Mitigated by D-025 |
+| [I-025](#i-025) | 2026-09-30 | Visual prompt confuses the tomato can with the potted meat can | Mitigated by D-025; lookalike removed (D-035) |
 | [I-026](#i-026) | 2026-09-30 | Restarting the sim resets sim time; running nodes keep stale TF | Workaround |
 | [I-027](#i-027) | 2026-09-30 | Mustard side grasps blocked by neighbours at some yaws; no regrasp | Open |
 | [I-028](#i-028) | 2026-09-30 | Small MoveIt/PhysX mismatches: SRDF virtual joint, start state past a joint limit, sim lag | Resolved |
 | [I-029](#i-029) | 2026-09-30 | Held objects dropped in transit: gripper controller released the squeeze on a stall; shelf items not in MoveIt | Resolved |
 | [I-030](#i-030) | 2026-09-30 | A second `ros_cell.py` started while the first still ran: two `/clock`s, TF_OLD_DATA flood | Resolved |
 | [I-031](#i-031) | 2026-09-30 | Orphaned step-2 nodes from an earlier run: two `move_group`s, every execute aborted | Workaround |
+| [I-032](#i-032) | 2026-09-30 | KDL IK returns arbitrary (flipped) configurations: contorted motions | Resolved by D-037 |
+| [I-033](#i-033) | 2026-09-30 | Pilz PTP and OMPL's default collision checks are too sparse for the 2 cm shelf boards | Resolved by D-037 |
+| [I-034](#i-034) | 2026-09-30 | Under the 140 N squeeze the mimic finger drifts; one finger's position under-read the grip by ~9 mm | Resolved |
+| [I-035](#i-035) | 2026-09-30 | Via-home second leg planned from exact home; MoveIt refused it (start 0.02 rad off) | Resolved |
+| [I-036](#i-036) | 2026-09-30 | pick_ik needs apt (sudo); built from source in `third_party/` to validate | Resolved (apt) |
+| [I-037](#i-037) | 2026-09-30 | A can set down at the top board's end ended up off the shelf | Open |
 
 ### I-001
 Python fails with errors ordinary code can't produce: `unknown opcode`, `invalid SRE code`, a bogus
@@ -427,6 +571,9 @@ Harmless here: the grasp model is its bounding box and it is placed upright. `ev
 ### I-025
 The visual prompt (a crop of the real BOP image) scores the lookalike potted meat can about as high as the tomato
 can in sim renders. **Mitigated by** [D-025](#d-025). Better prompts (more views, sim-domain examples) remain open.
+**2026-09-30, new layout:** the potted meat can scored 0.46 (visual) against the real can's 0.26, and the text model
+called the lying can a "bottle"; the fused check let the wrong one through in two runs. The potted meat can was removed
+from the scene (D-035). Better prompts (more views, sim-domain examples) remain open.
 
 ### I-026
 Restarting `sim/ros_cell.py` restarts sim time at 0; Python nodes keep TF from the old run ("extrapolation into
@@ -466,10 +613,48 @@ reparented to init) was still running from an earlier session, along with two `g
 publishers. Two `move_group`s answered the same `/move_action` goal. **Workaround:** before step 2, check that
 `ros2 node list | sort | uniq -d` prints nothing, and stop leftovers with `pgrep -af "ros2 launch|move_group"`.
 
+### I-032
+MoveIt's KDL plugin, asked for a side pregrasp of the mustard from a home seed, returned configurations 6.2 / 10.3 /
+11.3 rad (summed) from home; a least-squares IK from the same seed finds one 3.3 rad away. The task then moved
+through those. **Fix:** pick_ik + chained seeds + joint targets (D-037).
+
+### I-033
+Pilz checks a PTP trajectory at its fixed sample times, several cm apart at the hand; OMPL's default
+`longest_valid_segment_fraction` (0.005) is ~8 cm there. The held object was seen hitting the shelf. **Fix:**
+the task checks every straight line every 0.02 rad; OMPL's fraction is 0.0005 (D-037).
+
+### I-034
+With 140 N, `panda_finger_joint2` (mimic) ended up to 8 mm off `panda_finger_joint1`, so 2 × joint1 read the tomato can
+(67 mm) as 49 mm. **Fix:** the grip is joint1 + joint2; 64 articulation iterations. Light objects still read a few mm
+narrower than they are.
+
+### I-035
+"Two straight lines through home" planned both legs up front; after the first the arm stopped 0.02 rad off home at
+joint 5 and MoveIt rejected the second (`start point deviates from current robot state`). **Fix:** the second leg is
+planned from the actual state after the first.
+
+### I-036
+`ros-jazzy-pick-ik` is in apt but installing needs sudo. For validation it was built from source (with range-v3) in
+`third_party/pick_ik_ws/` (gitignored) and sourced before `ros2/install`. **Resolved:** `ros-jazzy-pick-ik` installed
+from apt, the source build deleted. (Without either, every IK request fails: both picks failed in a run in between.)
+
+### I-037
+Episode 0 (D-037 batch): the task placed the can upright at (0.32, −0.66) on the top board, 20 cm from its open
+right end, and reported PLACED; ground truth then had it lying off the shelf. Probably knocked while the fingers
+backed out (`depart` is only partly feasible near the reach limit). Not yet reproduced.
+
 | ID | Question | Notes |
 |---|---|---|
 | <a id="q-001"></a>Q-001 | Does stage 5 (multi-plane RANSAC for shelf supports) share the C++ RANSAC with stage 3? | **Answered by [D-019](#d-019):** yes, one library + pybind11 |
 | <a id="q-002"></a>Q-002 | ROS plan needs stage 5 added | **Answered by [D-020](#d-020)** |
+
+## Roadmap snapshot (2026-09-30, after D-035–D-038)
+
+| Phase | Status |
+|---|---|
+| 0–4 | Done (see the first snapshot) |
+| 4b · Clean motions | Done: layout from reach (D-035), longer fingers + 140 N (D-036), pick_ik + chained IK + straight joint-space moves (D-037). 10 episodes: mustard 10/10, can 8/10 |
+| 5 · Robustness | Next: install pick_ik from apt (I-036), vision checks (D-039), hand-eye calibration (I-018), depth noise (I-015), better prompts (I-025) |
 
 ## Roadmap snapshot (2026-09-30)
 

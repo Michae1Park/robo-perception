@@ -33,24 +33,32 @@ def points_and_normals(depth_m, K, T_base_cam):
     return P, n, d, ok
 
 
-def find_planes(P, n, ok, cfg):
-    """Sequential RANSAC on the upward-facing points: fit the biggest horizontal plane, remove its points,
-    repeat. -> list of (height z, inlier pixel mask)."""
-    horiz = ok & (np.abs(n[..., 2]) > np.cos(np.radians(cfg['max_tilt_deg'])))
-    idx = np.flatnonzero(horiz)
+def find_planes(P, n, ok, cfg, cpp=False):
+    """Sequential RANSAC on the upward-facing points: fit the biggest horizontal plane, remove its points, repeat.
+    cpp=True runs the loop in C++ (ppp_geometry, D-019). -> list of (height z, inlier pixel mask), lowest first."""
+    idx = np.flatnonzero(ok & (np.abs(n[..., 2]) > np.cos(np.radians(cfg['max_tilt_deg']))))
+    pts = P.reshape(-1, 3)[idx]
+    kw = dict(dist_thresh=cfg['ransac_dist'], iters=cfg['ransac_iters'], max_tilt_deg=cfg['max_tilt_deg'],
+              min_inliers=cfg['min_inliers'])
+    if cpp:
+        import ppp_geometry_py
+        inliers = [m for _, m in ppp_geometry_py.find_planes(pts, up=np.array([0.0, 0.0, 1.0]),
+                                                             max_planes=cfg['max_planes'], **kw)]
+    else:
+        inliers, rest = [], np.arange(len(pts))
+        for k in range(cfg['max_planes']):
+            plane, inl = spatial.fit_plane_ransac(pts[rest], up=(0, 0, 1), seed=k, **kw)
+            if plane is None:
+                break
+            m = np.zeros(len(pts), bool)
+            m[rest[inl]] = True
+            inliers.append(m)
+            rest = rest[~inl]
     planes = []
-    for k in range(cfg['max_planes']):
-        if len(idx) < cfg['min_inliers']:
-            break
-        plane, inl = spatial.fit_plane_ransac(P.reshape(-1, 3)[idx], cfg['ransac_dist'], cfg['ransac_iters'],
-                                              up=(0, 0, 1), max_tilt_deg=cfg['max_tilt_deg'],
-                                              min_inliers=cfg['min_inliers'], seed=k)
-        if plane is None:
-            break
+    for m in inliers:
         mask = np.zeros(P.shape[:2], bool)
-        mask.flat[idx[inl]] = True
+        mask.flat[idx[m]] = True
         planes.append((float(P[mask][:, 2].mean()), mask))
-        idx = idx[~inl]
     return sorted(planes, key=lambda p: p[0])
 
 
@@ -107,15 +115,14 @@ def analyze_support(s, supports, P, valid, grid, cfg):
     iy, ix = grid.cells(pts[:, :2])
     inside = s['hull'][iy, ix]
     h = pts[:, 2] - s['z']
-    above = inside & (h > cfg['height_thresh']) & (pts[:, 2] < ceiling[iy, ix] - 0.01) & (h < cfg['max_height'])
+    above = inside & (h > cfg['height_thresh']) & (pts[:, 2] < s['ceiling_z'] - 0.01) & (h < cfg['max_height'])
     counts = np.zeros(grid.shape, int)
     np.add.at(counts, (iy[above], ix[above]), 1)
     g = np.full(grid.shape, UNKNOWN, np.int8)
     g[s['cells'] & s['hull']] = FREE
     g[(counts >= 3) & s['hull']] = OCCUPIED
-    g[~s['hull']] = UNKNOWN
-    free = ((g == FREE) & s['hull']).astype(np.uint8)
-    clear = cv2.distanceTransform(np.pad(free, 1), cv2.DIST_L2, 5)[1:-1, 1:-1] * grid.res - grid.res / 2
+    free = (g == FREE).astype(np.uint8)
+    clear = cv2.distanceTransform(np.pad(free, 1), cv2.DIST_L2, cv2.DIST_MASK_PRECISE)[1:-1, 1:-1] * grid.res - grid.res / 2
     s.update(ceiling=ceiling, grid=g, clearance=np.maximum(clear, 0) * free)
 
 
@@ -136,11 +143,11 @@ def candidates(s, grid, radius, need_headroom, cfg, shoulder=SHOULDER):
     ok = (s['clearance'] >= radius) & (headroom >= need_headroom)
     out = []
     score = np.where(ok, s['clearance'], -1.0)
+    yy, xx = np.mgrid[0:grid.shape[0], 0:grid.shape[1]]
     while len(out) < cfg['per_support'] and score.max() > 0:
         iy, ix = np.unravel_index(score.argmax(), score.shape)
         xy = grid.centre(iy, ix)
         reach = np.linalg.norm(np.array([*xy, s['z']]) - shoulder)
-        yy, xx = np.mgrid[0:grid.shape[0], 0:grid.shape[1]]
         score[(yy - iy) ** 2 + (xx - ix) ** 2 <= (2 * radius / grid.res) ** 2] = -1
         if reach > cfg['max_reach']:
             continue
@@ -194,7 +201,8 @@ def rest_poses(verts, com=None, contact_tol=0.002, min_width=0.028, min_margin=0
                merge_deg=8.0):
     """How the object can stand on a flat support: one entry per resting face of its convex hull whose support
     polygon holds the centre of mass (with `min_margin`) and is at least `min_width` wide. Narrower means a curved
-    surface resting on one facet of the tessellated hull: a can on its side (2.0-2.5 cm facets) would roll. Upside-down poses (the mesh's +z tilted more than `max_tilt_deg`) are left out.
+    surface resting on one facet of the tessellated hull: a can on its side (2.0-2.5 cm facets) would roll.
+    Upside-down poses (the mesh's +z tilted more than `max_tilt_deg`) are left out.
 
     YCB meshes are modelled upright (+z up), so the tilt of the mesh's +z from vertical ranks the poses:
     upright first, the "common-sense" way to store a bottle or a can; the rest by stability margin.

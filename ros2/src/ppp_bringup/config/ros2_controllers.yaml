@@ -30,5 +30,5 @@ panda_hand_controller:
   ros__parameters:
     joint: panda_finger_joint1
     goal_tolerance: 0.002
-    max_effort: 70.0
+    max_effort: 140.0              # unused with a position interface: the sim drive sets the force (config.yaml sim.gripper)
     allow_stalling: false

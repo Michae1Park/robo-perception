@@ -8,8 +8,9 @@ import sys
 import threading
 
 import numpy as np
-from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Pose, PoseStamped
+from rclpy.duration import Duration
+from rclpy.time import Time as RTime
 from sensor_msgs.msg import Image
 
 REPO = os.environ.get('PPP_REPO') or os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -17,7 +18,7 @@ REPO = os.environ.get('PPP_REPO') or os.path.abspath(os.path.join(os.path.dirnam
 if REPO not in sys.path:
     sys.path.insert(0, REPO)
 
-from vision import load_config  # noqa: E402,F401  (re-exported)
+from vision import load_config, read_obj_vertices  # noqa: E402,F401  (re-exported)
 from vision import transforms as tf  # noqa: E402
 
 BASE = 'panda_link0'
@@ -36,6 +37,13 @@ def ycb_name(target):
 
 def mesh_path(target):
     return os.path.join(YCB, ycb_name(target), 'textured.obj')
+
+
+def mesh_vertices(target, _cache={}):
+    """Vertices of the target's mesh (object frame), read once."""
+    if target not in _cache:
+        _cache[target] = read_obj_vertices(mesh_path(target))
+    return _cache[target]
 
 
 # ------------------------------------------------------------------ images
@@ -71,28 +79,7 @@ def camera_K(info):
 
 # ------------------------------------------------------------------ poses
 def quat_to_R(q):
-    x, y, z, w = q.x, q.y, q.z, q.w
-    return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-                     [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
-                     [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
-
-
-def R_to_quat(R):
-    """-> (x, y, z, w), w >= 0."""
-    t = np.trace(R)
-    if t > 0:
-        s = np.sqrt(t + 1.0) * 2
-        q = [(R[2, 1] - R[1, 2]) / s, (R[0, 2] - R[2, 0]) / s, (R[1, 0] - R[0, 1]) / s, 0.25 * s]
-    else:
-        i = int(np.argmax(np.diag(R)))
-        j, k = (i + 1) % 3, (i + 2) % 3
-        s = np.sqrt(1.0 + R[i, i] - R[j, j] - R[k, k]) * 2
-        q = [0.0, 0.0, 0.0, (R[k, j] - R[j, k]) / s]
-        q[i] = 0.25 * s
-        q[j] = (R[j, i] + R[i, j]) / s
-        q[k] = (R[k, i] + R[i, k]) / s
-    q = np.array(q)
-    return q if q[3] >= 0 else -q
+    return tf.quat_to_R((q.x, q.y, q.z, q.w))
 
 
 def pose_to_T(p):
@@ -104,7 +91,7 @@ def pose_to_T(p):
 def T_to_pose(T):
     p = Pose()
     p.position.x, p.position.y, p.position.z = map(float, T[:3, 3])
-    p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w = map(float, R_to_quat(T[:3, :3]))
+    p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w = map(float, tf.R_to_quat(T[:3, :3]))
     return p
 
 
@@ -115,18 +102,11 @@ def T_to_pose_stamped(T, frame, stamp):
     return m
 
 
-def transform_to_T(t):
-    """geometry_msgs TransformStamped -> 4x4."""
+def lookup_T(buffer, target, source, stamp, timeout=1.0):
+    """TF lookup -> 4x4 (frame `source` in frame `target`) at a message stamp."""
+    t = buffer.lookup_transform(target, source, RTime.from_msg(stamp), timeout=Duration(seconds=timeout))
     r, p = t.transform.rotation, t.transform.translation
     return tf.make_T(quat_to_R(r), [p.x, p.y, p.z])
-
-
-def lookup_T(buffer, target, source, stamp, timeout=1.0):
-    from rclpy.duration import Duration
-    from rclpy.time import Time as RTime
-    t = buffer.lookup_transform(target, source, RTime.from_msg(stamp) if isinstance(stamp, Time) else stamp,
-                                timeout=Duration(seconds=timeout))
-    return transform_to_T(t)
 
 
 def stamp_sec(s):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Load the fixed parts of the cell into MoveIt's planning scene: table, robot pedestal, shelf (panels + boards),
+"""Load the fixed parts of the cell into MoveIt's planning scene: table, robot pedestal, pantry (posts + boards),
 floor. Geometry from config.yaml `sim:` - in a real cell these would be measured once (D-010). Objects on the table
 and shelf are NOT added: perception finds them. Runs once and exits.
 """
@@ -13,7 +13,7 @@ from moveit_msgs.srv import ApplyPlanningScene
 from shape_msgs.msg import SolidPrimitive
 
 sys.path.insert(0, os.environ['PPP_REPO'])
-from vision import load_config  # noqa: E402
+from vision import load_config, shelf_boxes  # noqa: E402
 
 BASE = 'panda_link0'
 
@@ -35,16 +35,7 @@ def cell_objects(cfg):
     objs = [box('table', [tx, ty, -th / 2], [tw, tl, th]),
             box('pedestal', [0.0, 0.0, -th / 2 - 0.005], [0.2, 0.2, th]),     # top 5 mm below the base: no contact
             box('floor', [0.0, 0.0, -th - 0.01], [4.0, 4.0, 0.02])]
-    s = cfg['shelf']
-    (cx, cy), (w, d), t = s['center_xy'], s['size'], s['board']
-    floor_z, top = -th, max(s['levels_z'])
-    h = top - floor_z
-    for side, x in (('left', cx - w / 2 + t / 2), ('right', cx + w / 2 - t / 2)):
-        objs.append(box('shelf_' + side, [x, cy, floor_z + h / 2], [t, d, h]))
-    objs.append(box('shelf_back', [cx, cy - d / 2 + t / 2, floor_z + h / 2], [w, t, h]))
-    for k, z in enumerate(s['levels_z']):
-        objs.append(box('shelf_board_%d' % k, [cx, cy, z - t / 2], [w, d, t]))
-    return objs
+    return objs + [box('shelf_' + name, center, size) for name, center, size in shelf_boxes(cfg['shelf'], -th)]
 
 
 def main():

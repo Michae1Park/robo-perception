@@ -19,9 +19,7 @@ from sensor_msgs_py import point_cloud2
 from ppp_interfaces.msg import Grasp
 from ppp_interfaces.srv import AnalyzeTable, PlanGrasps
 
-from .common import BASE, T_to_pose, T_to_pose_stamped, call, load_config, mesh_path, pose_to_T, tf, ycb_name
-
-FINGER_THICK = 0.01   # Franka finger pad thickness, as in pipeline/interactive_grasp.py
+from .common import BASE, T_to_pose, T_to_pose_stamped, call, load_config, mesh_vertices, pose_to_T, tf, ycb_name
 
 
 def rot(axis, a):
@@ -47,18 +45,9 @@ class GraspNode(Node):
         self.table = self.create_client(AnalyzeTable, '/spatial_node/analyze_table', callback_group=self.cb)
         self.pub = self.create_publisher(PoseArray, '~/grasps', 5)
         self.create_service(PlanGrasps, '~/plan_grasps', self.on_request, callback_group=self.cb)
-        self.boxes = {}
         self.objects = cfg.get('objects', {})
         self.table_xy = (cfg['sim']['table_center'], cfg['sim']['table_size'][:2])
         self.get_logger().info('ready')
-
-    def box(self, target):
-        """Object's mesh bounding box (object frame) - the grasp model."""
-        if target not in self.boxes:
-            from vision.grasp import read_obj_vertices
-            v = read_obj_vertices(mesh_path(target))
-            self.boxes[target] = (v.min(axis=0), v.max(axis=0))
-        return self.boxes[target]
 
     def on_request(self, req, res):
         from vision import grasp as g
@@ -74,7 +63,8 @@ class GraspNode(Node):
             res.message = 'no table: ' + table.message
             return res
         T_wo = pose_to_T(req.object_pose)
-        lo, hi = self.box(req.target)
+        v = mesh_vertices(req.target)
+        lo, hi = v.min(axis=0), v.max(axis=0)                            # the grasp model: the mesh's bounding box
         pts = point_cloud2.read_points_numpy(table.above_table, field_names=('x', 'y', 'z')).astype(float)
         in_obj = tf.transform_points(tf.invert(T_wo), pts)
         own = np.all((in_obj > lo - 0.01) & (in_obj < hi + 0.01), axis=1)
@@ -97,8 +87,8 @@ class GraspNode(Node):
             for c in cs:
                 c.T_obj_tcp = S @ c.T_obj_tcp
             cands += cs
-            keep += g.filter_candidates(cs, T_wo, table_z, self.max_tilt, self.gcfg['table_clearance'], FINGER_THICK,
-                                        obstacles, self.gripper['max_opening'])
+            keep += g.filter_candidates(cs, T_wo, table_z, self.max_tilt, self.gcfg['table_clearance'], obstacles,
+                                        self.gripper['max_opening'], g.finger_length(self.gripper))
         keep.sort(key=lambda k: k.tilt)
         n_ok = len(keep)
         keep = keep[:self.max_grasps]

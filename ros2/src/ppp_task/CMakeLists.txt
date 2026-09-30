@@ -16,6 +16,7 @@ find_package(geometric_shapes REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(ppp_interfaces REQUIRED)
 find_package(ament_index_cpp REQUIRED)
@@ -25,7 +26,7 @@ target_include_directories(task_manager PRIVATE include)
 target_link_libraries(task_manager behaviortree_cpp::behaviortree_cpp rclcpp::rclcpp rclcpp_action::rclcpp_action
   moveit_ros_planning_interface::moveit_move_group_interface moveit_ros_planning_interface::moveit_planning_scene_interface
   moveit_core::moveit_trajectory_processing geometric_shapes::geometric_shapes tf2_eigen::tf2_eigen ament_index_cpp::ament_index_cpp
-  ${control_msgs_TARGETS} ${sensor_msgs_TARGETS} ${geometry_msgs_TARGETS} ${ppp_interfaces_TARGETS})
+  ${control_msgs_TARGETS} ${sensor_msgs_TARGETS} ${geometry_msgs_TARGETS} ${std_msgs_TARGETS} ${ppp_interfaces_TARGETS})
 install(TARGETS task_manager DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY trees DESTINATION share/${PROJECT_NAME})
 ament_package()

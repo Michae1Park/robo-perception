@@ -21,7 +21,7 @@ import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from vision.grasp import read_obj_vertices
+from vision import read_obj_vertices  # noqa: E402
 from vision.transforms import rot_z  # noqa: E402
 
 OBJECTS = ['004_sugar_box', '005_tomato_soup_can', '006_mustard_bottle', '010_potted_meat_can',

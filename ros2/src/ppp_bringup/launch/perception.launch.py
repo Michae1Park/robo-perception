@@ -11,7 +11,7 @@
   ros2 launch ppp_bringup perception.launch.py [foundationpose:=false] [eval:=false]
 """
 import os
-from pathlib import Path
+import sys
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, SetEnvironmentVariable
@@ -19,17 +19,11 @@ from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-REPO = os.environ.get('PPP_REPO') or str(Path(os.path.realpath(__file__)).parents[4])
-VENV_PY = os.path.join(REPO, '.venv', 'bin', 'python')
-TARGETS = ['mustard_bottle', 'tomato_soup_can']
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from common import REPO, TARGETS, VENV_PY, config  # noqa: E402
+
 FIXED = '/camera/camera'
 WRIST = '/wrist_camera/camera'
-
-
-def config():
-    import yaml
-    with open(os.path.join(REPO, 'config.yaml')) as f:
-        return yaml.safe_load(f)
 
 
 def py_node(name, remappings=(), params=None, condition=None):

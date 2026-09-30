@@ -23,23 +23,7 @@ from tf2_ros import Buffer, TransformListener
 from ppp_interfaces.msg import Placement
 from ppp_interfaces.srv import GetPlacements
 
-from .common import BASE, R_to_quat, camera_K, depth_m, load_config, lookup_T, mesh_path, quat_to_R, stamp_sec
-
-
-def find_planes_cpp(P, n, ok, cfg):
-    """vision.place.find_planes() with the RANSAC loop in C++: -> [(height z, inlier pixel mask)], lowest first."""
-    import ppp_geometry_py as geo
-    horiz = ok & (np.abs(n[..., 2]) > np.cos(np.radians(cfg['max_tilt_deg'])))
-    idx = np.flatnonzero(horiz)
-    fits = geo.find_planes(P.reshape(-1, 3)[idx], dist_thresh=cfg['ransac_dist'], iters=cfg['ransac_iters'],
-                           up=np.array([0.0, 0.0, 1.0]), max_tilt_deg=cfg['max_tilt_deg'],
-                           min_inliers=cfg['min_inliers'], max_planes=cfg['max_planes'])
-    planes = []
-    for _, inl in fits:
-        mask = np.zeros(P.shape[:2], bool)
-        mask.flat[idx[inl]] = True
-        planes.append((float(P[mask][:, 2].mean()), mask))
-    return sorted(planes, key=lambda p: p[0])
+from .common import BASE, camera_K, depth_m, load_config, lookup_T, mesh_vertices, stamp_sec, tf
 
 
 class PlaceNode(Node):
@@ -57,7 +41,6 @@ class PlaceNode(Node):
         self.create_subscription(CameraInfo, 'depth/camera_info', self.on_info, q, callback_group=self.cb)
         self.pub = self.create_publisher(PoseArray, '~/placements', 5)
         self.create_service(GetPlacements, '~/get_placements', self.on_request, callback_group=self.cb)
-        self.verts = {}
         self.get_logger().info('ready')
 
     def on_depth(self, m):
@@ -67,12 +50,6 @@ class PlaceNode(Node):
 
     def on_info(self, m):
         self.info = m
-
-    def mesh(self, target):
-        if target not in self.verts:
-            from vision.grasp import read_obj_vertices
-            self.verts[target] = read_obj_vertices(mesh_path(target))
-        return self.verts[target]
 
     def on_request(self, req, res):
         from vision import place
@@ -92,16 +69,12 @@ class PlaceNode(Node):
             res.message = 'no camera pose: %s' % e
             return res
 
-        # how the object can stand: every stable rest pose of its mesh (upright first), or just the table one
-        V0 = self.mesh(req.target)
-        if req.rest_poses:
-            poses = [(p['name'], p['R']) for p in place.rest_poses(V0)]
-        else:
-            poses = [('as on the table', quat_to_R(req.object_orientation))]
+        V0 = mesh_vertices(req.target)
+        poses = [(p['name'], p['R']) for p in place.rest_poses(V0)]   # how it can stand, upright first
 
         cfg = self.cfg
         P, n, valid, ok = place.points_and_normals(depth_m(depth_msg), camera_K(self.info), T_bc)
-        planes = find_planes_cpp(P, n, ok, cfg)
+        planes = place.find_planes(P, n, ok, cfg, cpp=True)
         grid = place.Grid(P[valid][:, :2], cfg['resolution'])
         supports = place.find_supports(P, planes, grid, cfg)
         for s in supports:
@@ -113,7 +86,7 @@ class PlaceNode(Node):
             need = float(np.ptp(V[:, 2])) + cfg['hand_clearance']
             cands = [c for s in supports for c in place.candidates(s, grid, radius, need, cfg)]
             cands.sort(key=lambda c: -c['clearance'])
-            q = R_to_quat(R)
+            q = tf.R_to_quat(R)
             for c in cands:
                 p = Placement(clearance=c['clearance'], headroom=c['headroom'], reach=c['reach'],
                               object_bottom=float(-V[:, 2].min()), rest_pose=name, rank=rank)

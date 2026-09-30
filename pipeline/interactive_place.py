@@ -20,7 +20,7 @@ import numpy as np
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
-from vision import grasp as g, load_config, place  # noqa: E402
+from vision import load_config, place, read_obj_vertices  # noqa: E402
 
 DATA = os.path.join(REPO, 'data', 'sim', 'shelf')
 PALETTE = [(46, 204, 113), (231, 76, 60), (52, 152, 219), (241, 196, 15), (155, 89, 182), (26, 188, 156)]  # RGB
@@ -61,7 +61,7 @@ def main():
     K = np.loadtxt(os.path.join(DATA, 'cam_K.txt'))
     T_bc = np.loadtxt(os.path.join(DATA, 'T_base_cam.txt'))   # from the arm's joint angles: which way is up
     T_cb = np.linalg.inv(T_bc)
-    verts = g.read_obj_vertices(os.path.join(REPO, 'assets', 'ycb', a.object, 'textured.obj'))
+    verts = read_obj_vertices(os.path.join(REPO, 'assets', 'ycb', a.object, 'textured.obj'))
     radius = np.linalg.norm(verts[:, :2], axis=1).max() + cfg['margin']   # upright, any yaw
     height = np.ptp(verts[:, 2])
     need = height + cfg['hand_clearance']

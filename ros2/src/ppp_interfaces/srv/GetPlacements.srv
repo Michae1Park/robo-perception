@@ -1,8 +1,6 @@
 # Stage 5: supports + free space in the latest wrist-camera frame -> where and how the object fits, best first:
 # preferred rest pose first (upright), then most clearance.
-string target
-geometry_msgs/Quaternion object_orientation   # as it stood on the table: used when rest_poses is false
-bool rest_poses                               # try every stable rest pose of the mesh (else only the table one)
+string target                                 # for every stable rest pose of its mesh (D-031)
 builtin_interfaces/Time not_before            # use a camera frame at least this new (after the arm stopped)
 ---
 bool success

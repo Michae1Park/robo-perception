@@ -28,7 +28,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
-from vision import grasp as g, load_config, spatial, viz  # noqa: E402
+from vision import grasp as g, load_config, read_obj_vertices, spatial, viz  # noqa: E402
 
 SCENE = os.path.join(REPO, 'data', 'multi_object_scene')
 OUT = os.path.join(REPO, 'output')
@@ -198,7 +198,7 @@ def run_command(command):
 
     T_world_cam = scene['T_world_cam']
     T_world_obj = T_world_cam @ np.array(det['pose']['ob_in_cam'])
-    verts = g.read_obj_vertices(mesh_path)
+    verts = read_obj_vertices(mesh_path)
     gripper, gcfg = cfg['gripper'], cfg['grasp']
     cands = g.generate_candidates(verts.min(axis=0), verts.max(axis=0), gripper['max_opening'],
                                   gcfg['width_margin'], gripper['finger_depth'])

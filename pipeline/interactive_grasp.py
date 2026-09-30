@@ -18,10 +18,10 @@ import numpy as np
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
-from vision import grasp as g, load_config, spatial, transforms as tf  # noqa: E402
+from vision import grasp as g, load_config, read_obj_vertices, spatial, transforms as tf  # noqa: E402
 
 SCENE = os.path.join(REPO, 'data', 'multi_object_scene')
-FINGER_LEN, FINGER_THICK = 0.045, 0.01  # drawing + the filter's fingertip check
+FINGER_LEN, FINGER_THICK = 0.045, g.FINGER_THICK  # stock Franka fingers: TCP -> palm, pad thickness
 TIP_TO_GRIP = tf.make_T(t=[0, 0, -FINGER_LEN / 2])  # fingertips (TCP) -> halfway up the fingers ("grip" frame)
 
 
@@ -93,7 +93,7 @@ def main():
     T_cw = tf.invert(T_wc)
     res = json.load(open(os.path.join(REPO, 'output', 'pose', a.pose + '.json')))
     T_wo = T_wc @ np.array(res['ob_in_cam'])
-    verts = g.read_obj_vertices(res['mesh'])
+    verts = read_obj_vertices(res['mesh'])
     lo, hi = verts.min(axis=0), verts.max(axis=0)
     ext = hi - lo
 
@@ -118,8 +118,8 @@ def main():
     # 2. filter each candidate against the table (stage 3 frame: table z = 0, up = +z)
     rows = []
     for c in cands:
-        T, tilt, lowest, hits, why = g.evaluate(c, T_wo, 0.0, a.max_tilt, a.clearance, FINGER_THICK,
-                                                obstacles, a.max_opening)
+        T, tilt, lowest, hits, why = g.evaluate(c, T_wo, 0.0, a.max_tilt, a.clearance, obstacles, a.max_opening,
+                                                FINGER_LEN)
         rows.append((c, T, np.degrees(tilt), lowest, hits, why))
     rows.sort(key=lambda r: (bool(r[5]), r[2]))  # feasible first, then least tilted
     n_ok = sum(not r[5] for r in rows)

@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pytest
 
-from vision import grasp as g, load_config, REPO, transforms as tf
+from vision import REPO, grasp as g, load_config, read_obj_vertices, transforms as tf
 
 
 def test_candidates_respect_gripper_width():
@@ -38,7 +38,7 @@ def test_every_ycb_object_has_a_top_down_grasp():
     if not os.path.isdir(root):
         pytest.skip('YCB meshes not prepared')
     for name in sorted(os.listdir(root)):
-        v = g.read_obj_vertices(os.path.join(root, name, 'textured.obj'))
+        v = read_obj_vertices(os.path.join(root, name, 'textured.obj'))
         lo, hi = v.min(axis=0), v.max(axis=0)
         T_obj = tf.make_T(tf.rot_z(1.0), [0.5, 0.2, -lo[2]])   # resting upright on z = 0
         cands = g.filter_candidates(

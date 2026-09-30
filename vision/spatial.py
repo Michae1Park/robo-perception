@@ -1,4 +1,5 @@
-"""Stage 3: depth -> point cloud -> table plane (RANSAC) -> place-zone occupancy grid. Pure numpy."""
+"""Stage 3: depth -> point cloud -> table plane (RANSAC) -> occupancy grid -> free-space clearance."""
+import cv2
 import numpy as np
 
 FREE, OCCUPIED, UNKNOWN = 0, 100, -1
@@ -113,33 +114,11 @@ def occupancy_grid(points_world, plane, zone, resolution=0.01, height_thresh=0.0
     return grid
 
 
-def cell_centers(zone, resolution, shape):
-    (x0, _), (y0, _) = zone
-    ny, nx = shape
-    xs = x0 + (np.arange(nx) + 0.5) * resolution
-    ys = y0 + (np.arange(ny) + 0.5) * resolution
-    gx, gy = np.meshgrid(xs, ys)
-    return np.stack([gx, gy], axis=-1)  # (ny, nx, 2)
-
-
-def clearance_map(grid, zone, resolution):
-    """Distance (m) from each cell centre to the nearest non-free cell or the zone border."""
-    (x0, x1), (y0, y1) = zone
-    centers = cell_centers(zone, resolution, grid.shape)
-    border = np.minimum.reduce([centers[..., 0] - x0, x1 - centers[..., 0],
-                                centers[..., 1] - y0, y1 - centers[..., 1]])
-    blocked = centers[grid != FREE]
-    if len(blocked) == 0:
-        return border
-    flat = centers.reshape(-1, 2)
-    d = np.full(len(flat), np.inf)
-    for i in range(0, len(blocked), 256):
-        chunk = blocked[i:i + 256]
-        dd = np.linalg.norm(flat[:, None, :] - chunk[None, :, :], axis=-1).min(axis=1)
-        d = np.minimum(d, dd)
-    # the blocked cell may extend up to half a cell towards us
-    d = np.maximum(d - resolution / 2.0, 0.0).reshape(grid.shape)
-    return np.minimum(d, border)
+def clearance_map(grid, resolution):
+    """Distance (m) from each cell centre to the nearest non-free cell or the grid border (0 on non-free cells)."""
+    free = np.pad((grid == FREE).astype(np.uint8), 1)             # the border counts as blocked
+    d = cv2.distanceTransform(free, cv2.DIST_L2, cv2.DIST_MASK_PRECISE)[1:-1, 1:-1]
+    return np.maximum(d * resolution - resolution / 2.0, 0.0) * (grid == FREE)   # a blocked cell reaches half a cell
 
 
 # ---------------------------------------------------------------- whole stage
@@ -179,4 +158,4 @@ def analyze_scene(depth_m, K, cfg):
                           cfg['height_thresh'], cfg['max_height'])
     return {'T_world_cam': T_world_cam, 'plane_cam': plane_cam, 'inliers': inliers,
             'n_points': len(pts_cam), 'zone': zone, 'grid': grid,
-            'clearance': clearance_map(grid, zone, cfg['resolution'])}
+            'clearance': clearance_map(grid, cfg['resolution'])}

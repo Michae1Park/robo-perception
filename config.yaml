@@ -1,5 +1,5 @@
-# All tunable parameters of the vision pipeline. Units: metres, degrees.
-# Read by pipeline/*.py via vision.load_config().
+# All tunable parameters: vision stages, gripper, sim cell. Units: metres, degrees.
+# Read through vision.load_config() (pipeline/, sim/, ROS nodes and launch files).
 
 detect:                       # stage 1 (YOLOE) - used by every stage 1 script + the notebook
   weights: yoloe-11l-seg.pt   # file in models/ (auto-downloaded). yoloe-11s/m/l-seg.pt: s = faster, l = more accurate
@@ -26,9 +26,16 @@ spatial:                      # stage 3 (table plane + occupancy grid)
   height_thresh: 0.012        # higher than this above the plane = obstacle
   max_height: 0.6             # ignore points above this
 
-gripper:                      # stage 4 (Franka Panda hand)
+gripper:                      # Franka Hand (stage 4, the task, the sim, MoveIt's robot model)
   max_opening: 0.08           # total finger opening
-  finger_depth: 0.03          # how far fingertips go past the grasped face
+  finger_depth: 0.045         # how far the pads' centre goes past the grasped face (capped at half the object)
+  finger_extension: 0.05      # fingers this much longer than stock (sim/cell.py + MoveIt URDF); TCP 0.1034 -> 0.1534
+
+robot:                        # Franka Panda joint poses (rad), used by the task and the sim
+  # home faces between the table and the shelf (joint 1 at -45 deg, D-035): both are a short turn away, and IK
+  # seeded from here lands in the natural elbow-up, wrist-down configuration
+  home_joints: [-0.785, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
+  look_joints: [-1.257, -0.88, 0.217, -1.445, -0.143, 1.164, 1.193]   # wrist camera at (0.12, -0.12, 0.90) looking at (0.12, -0.64, 0.22)
 
 objects:                      # what the pipeline knows about an object besides its mesh (assets/ycb/<name>)
   005_tomato_soup_can:
@@ -55,62 +62,70 @@ place:                        # stage 5 (shelf placement): supports -> free spac
   max_reach: 0.85             # Franka: max distance from the shoulder (0, 0, 0.333) to the place point
   per_support: 3              # best candidates kept per support
 
-sim:                          # Isaac Sim scene (sim/scene.py). World frame: z up, z = 0 is the table top, Franka base at origin
-  table_center: [0.55, 0.0]   # xy of the table centre; its top is at z = 0
-  table_size: [0.70, 0.80, 0.75]
+sim:                          # Isaac Sim cell (sim/cell.py). World frame = robot base (panda_link0): z up, z = 0 is the table top
+  # Layout (D-035): the Panda is most comfortable 0.5-0.72 m out (top-down) and with the hand 0.1-0.6 m high (sideways
+  # into the shelf), so the objects sit 0.5-0.7 m from the base and the working shelf boards at 0.05 / 0.45 m. Moving
+  # the shelf 10-20 cm further away cost placements (D-040). Long, narrow table and a floor-standing pantry: D-041.
+  table_center: [0.60, 0.175] # xy of the table centre; its top is at z = 0
+  table_size: [0.40, 0.95, 0.75]   # x 0.40..0.80, y -0.30..0.65, height
   objects:                    # YCB items on the table (assets/ycb/<name>). yaw_deg: fixed or [lo, hi] random per frame;
                               # tilt_deg 90 = lying on its side; target: true -> mask + ground-truth pose saved (demo picks)
-    - {name: 006_mustard_bottle,  xy: [0.48,  0.03], yaw_deg: [-30, 30], target: true}
-    - {name: 005_tomato_soup_can, xy: [0.68, -0.20], yaw_deg: [-180, 180], tilt_deg: 90, target: true}
-    - {name: 004_sugar_box,       xy: [0.40, -0.24], yaw_deg: 20}
-    - {name: 010_potted_meat_can, xy: [0.33,  0.22], yaw_deg: -30}
-    - {name: 061_foam_brick,      xy: [0.72,  0.24], yaw_deg: 45}
-    - {name: 077_rubiks_cube,     xy: [0.52,  0.28], yaw_deg: 15}
-  shelf:                      # open shelf 90 deg to the robot's right (-y), opening facing the robot: place target
-    center_xy: [0.0, -0.58]   # footprint centre; every level is ~0.6 m from the base (Franka reach ~0.85 m)
-    size: [0.60, 0.30]        # width (along x), depth (along y)
-    levels_z: [0.0, 0.32, 0.64]  # board tops (world z; floor at -0.75). 0.30 m gaps fit the hand around a 19 cm bottle
-    board: 0.02               # board / panel thickness
+    - {name: 006_mustard_bottle,  xy: [0.54,  0.08], yaw_deg: [-30, 30], target: true}
+    - {name: 005_tomato_soup_can, xy: [0.62, -0.13], yaw_deg: [-180, 180], tilt_deg: 90, target: true}
+    - {name: 077_rubiks_cube,     xy: [0.70,  0.18], yaw_deg: 15}
+    - {name: 004_sugar_box,       xy: [0.56,  0.34], yaw_deg: 20}
+    - {name: 061_foam_brick,      xy: [0.70,  0.48], yaw_deg: 45}
+  shelf:                      # metal pantry on the robot's right (-y): corner posts + boards, open back and sides
+    center_xy: [0.12, -0.645] # footprint centre: front 0.47 m from the base, back 0.82 m; 0.17 m clear of the table
+    size: [0.80, 0.35]        # width (along x), depth (along y)
+    levels_z: [-0.35, 0.05, 0.45, 0.95, 1.30]   # board tops (world z; floor at -0.75, 2.05 m tall). 0.38 m clear
+                              # above 0.05, 0.48 m above 0.45 (room to carry a tall item in); the Panda works on these two
+    board: 0.02               # board thickness
+    post: 0.03                # corner post (square)
   shelf_objects:              # items standing on the shelf boards (stage 5 must find the space around them)
-    - {name: 004_sugar_box,       level: 0, x: -0.14, yaw_deg: 10}   # x along the shelf width, from its centre
-    - {name: 010_potted_meat_can, level: 0, x:  0.16, yaw_deg: -20}
-    - {name: 061_foam_brick,      level: 1, x:  0.02, yaw_deg: 0}    # not a pick target: no duplicate of a demo object (I-014)
+    - {name: 004_sugar_box,       level: 1, x: -0.22, yaw_deg: 10}   # x along the shelf width, from its centre
+    - {name: 077_rubiks_cube,     level: 2, x:  0.22, yaw_deg: -20}   # no potted meat can anywhere: YOLOE takes it
+                                                                       # for the tomato can (I-025, D-036)
+    - {name: 061_foam_brick,      level: 2, x: -0.15, yaw_deg: 0}    # not a pick target: no duplicate of a demo object (I-014)
   wrist_camera:               # D455 on the Franka hand (stage 5): the arm moves to look_joints for the shelf shot
     mount_xyz: [0.0495, -0.0115, 0.066]   # colour lens in the panda_hand frame: body flat on the hand's +x side, glass flush
                                           # with the hand's front, long axis along the fingers' opening (y); looks along +z
-    mount_yaw_deg: 90                     # camera x = -hand y, camera y = hand x
-    look_joints: [-1.515, -0.826, -0.008, -1.066, -0.045, 0.909, 0.793]   # IK: camera at (0, -0.05, 0.95) looking at the shelf centre
+    mount_yaw_deg: 90                     # camera x = -hand y, camera y = hand x (shelf shot: robot.look_joints)
   overview:                   # --overview: one still for the docs (whole cell, arm looking at the shelf)
     size: [1600, 1200]
-    hfov_deg: 48
-    eye: [1.415, 1.725, 1.414]   # 30 deg from looking straight into the shelf (+y side), 25 deg above horizontal
-    target: [0.35, -0.12, 0.42]
+    hfov_deg: 54
+    eye: [1.85, 1.95, 1.55]
+    target: [0.35, -0.15, 0.42]
     extra_steps: 60
+  viewport:                   # --livestream: what the WebRTC client shows
+    eye: [2.00, -0.30, 1.30]
+    target: [0.35, -0.10, 0.10]
   colors:                     # sRGB 0-1 (as in a colour picker; converted to linear for USD)
     floor: [0.10, 0.12, 0.16]
     backdrop: [0.55, 0.65, 0.80]   # dome light colour = what you see behind the scene
     table: [0.66, 0.64, 0.60]      # light neutral grey: yellow / red / blue items all stand out
     pedestal: [0.08, 0.08, 0.09]
-    shelf: [0.10, 0.42, 0.70]
+    shelf: [0.78, 0.80, 0.83]      # brushed steel (metallic material)
+    fingers: [0.15, 0.15, 0.17]    # the finger extensions
   camera:                     # pinhole RGB-D camera, square pixels, centred principal point (fx of a D435 colour stream)
     width: 640
     height: 480
     fx: 615.0
-    eye: [1.00, 0.35, 0.50]   # camera position (world): ~0.7 m from the bottle, 36 deg down
-    target: [0.45, 0.00, 0.02] # point it looks at (middle of the table workspace)
+    eye: [1.15, 0.32, 0.64]   # camera position (world): ~0.95 m from the bottle, all five items in view
+    target: [0.60, 0.14, 0.02] # point it looks at (middle of the table workspace)
     rig:                      # RealSense D455 model on a floor tripod (visual only, never in the camera's own view)
       hub_height: 0.60        # leg hub above the floor
       leg_spread: 0.38        # foot distance from the column
-      leg_angles_deg: [30, 150, 270]   # chosen so no foot lands under the table
+      leg_angles_deg: [0, 120, 240]    # chosen so no foot lands under the table
       color: [0.08, 0.08, 0.09]
       metal_color: [0.55, 0.56, 0.58]
   arm_drive:                  # PhysX position drives of panda_joint1-7 (units per degree, as USD stores them)
     stiffness: 400.0          # N m / deg (the asset's value)
     damping: 10.0             # N m s / deg (asset: 80, which lags a moving trajectory by centimetres)
   gripper:                    # Franka Hand finger drive (panda_finger_joint1; joint2 mimics it) + finger-pad friction
-    stiffness: 3000.0         # N/m: squeezes with max_force once the fingers are ~2.5 cm short of their target
+    stiffness: 6000.0         # N/m: force = stiffness x (commanded - actual opening), up to max_force
     damping: 100.0
-    max_force: 70.0           # N, the real hand's continuous grasp force (the asset caps it at 7.2 N)
+    max_force: 140.0          # N, the real hand's peak grasp force (70 N continuous; the asset caps it at 7.2 N)
     friction: 2.0             # static = dynamic, combine mode max: rubber pads
   settle_steps: 120           # physics steps before each capture (object drop + renderer warm-up)
   physics_dt: 0.01666667      # 60 Hz

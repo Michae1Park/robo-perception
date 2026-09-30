@@ -1,34 +1,41 @@
-# Isaac Sim cell — table, YCB objects, Franka, shelf, RGB-D camera
+# Isaac Sim cell
 
-A simple simulated cell that runs **alongside** the vision work. For now it only **writes datasets**:
-RGB-D frames in the same layout as FoundationPose's `mustard0`, **plus ground-truth masks and poses for the pick targets**,
-so stage 2 can be scored (rotation / translation error). No ROS yet; the ROS 2 bridge comes later.
+One cell (`sim/cell.py`, parameters in `config.yaml` → `sim:`), used two ways:
 
-![Isaac Sim cell: table with 6 YCB items, Franka, shelf](sim/overview.png)
+| Script | What |
+|---|---|
+| `sim/scene.py` | Writes RGB-D datasets in FoundationPose's layout, with ground-truth masks and poses (stages 2 and 5 offline) |
+| `sim/ros_cell.py` | The same cell live over ROS 2: cameras, clock, ros2_control. See [ROS.md](ROS.md) |
+
+![Isaac Sim cell](sim/overview.png)
+
+## Layout
+
+World frame = robot base (`panda_link0`): z up, z = 0 is the table top. Chosen from the Panda's reach
+([D-035](DECISIONS.md#d-035), [D-040](DECISIONS.md#d-040)): top-down grasps are comfortable 0.5–0.72 m from the
+base, horizontal placements with the hand 0.1–0.6 m high. Moving the shelf further away cost placements.
 
 | Piece | What |
 |---|---|
-| Table | 0.7 × 0.8 m box in front of the robot (+x), top at world z = 0 |
-| Pick targets | `006_mustard_bottle` (upright) and `005_tomato_soup_can` (**lying on its side**): the two demo picks. Random yaw each frame (mustard within ±30°, can any); each gets its own mask + ground-truth pose. **Same OBJs FoundationPose uses** (`sim/ycb_usd.py` → USD), so ground truth and estimate share one object frame |
-| Other items | Sugar box, potted meat can, foam brick, Rubik's cube at fixed spots, placed so nothing blocks the camera's view of the targets |
-| Lying can | Rocks ~7 mm onto a flat of its collision hull in the first 2 s, then stays put (checked over 20 s, at every yaw) |
-| Shelf | Open shelf 90° to the robot's right (−y), opening facing the robot. Levels at z = 0 / 0.32 / 0.64 m; every level is 0.6–0.8 m from the shoulder (Franka reach ≈ 0.85 m), so it is the place target for pick-and-place |
-| Robot | Franka Panda (NVIDIA asset), base at the world origin on a pedestal. `scene.py` holds it in its home pose; `ros_cell.py` drives it through ros2_control ([ROS.md](ROS.md)). Joint drives and finger pads: `sim.arm_drive`, `sim.gripper` |
-| Shelf items | Sugar box + potted meat can on the bottom level, foam brick on the middle one (`shelf_objects`): stage 5 must find the space around them. Deliberately not a pick target, so a prompt never matches a shelf item ([I-014](DECISIONS.md#i-014)) |
-| Wrist camera | Same intrinsics; the NVIDIA **RealSense D455** model mounted flat on the hand's side (colour lens at hand (49.5, −11.5, 66) mm, glass flush with the hand's front, long axis along the fingers' opening), looking along the fingers. Visual only: no rigid body, no colliders. Each frame: table shot at home, then the arm moves to `wrist_camera.look_joints` (IK: camera at (0, −0.05, 0.95) looking into the shelf) and the wrist camera takes the shelf shot → `data/sim/shelf/` |
-| Camera | Pinhole 640×480, fx = fy = 615, front-left of the table (robot's view), 0.5 m above it and ~0.73 m from the bottle, looking 36° down at the table centre. Rendered as a **RealSense D455** (NVIDIA asset) on a ball head + floor tripod; the colour lens sits exactly on the optical centre. The rig is visual only and never appears in the camera's own images |
-| Look | Dark slate floor, blue-grey backdrop, light-grey table, blue shelf. Colours are sRGB in `sim.colors` |
+| Robot | Franka Panda on a 20 cm pedestal at the origin. Home faces between the table and the shelf (joint 1 at −45°) |
+| Gripper | Franka Hand with fingers **5 cm longer** than stock (a box continuing each finger, in the sim and in MoveIt's model), squeezing with **140 N** ([D-036](DECISIONS.md#d-036)) |
+| Table | 0.40 × 0.95 m, long side along y, in front of the robot (x 0.40–0.80 m, y −0.30–0.65 m), top at z = 0 |
+| Pick targets | `006_mustard_bottle` (upright, random yaw ±30°) and `005_tomato_soup_can` (**lying on its side**, any yaw), 0.55–0.65 m from the base |
+| Clutter | Sugar box, foam brick, Rubik's cube: obstacles, never targets. No potted meat can anywhere: YOLOE mistakes it for the tomato can ([I-025](DECISIONS.md#i-025)) |
+| Shelf | Metal pantry, 2.05 m tall: four corner posts and five boards, open at the back and sides ([D-041](DECISIONS.md#d-041)). 0.80 m wide, 0.35 m deep, on the robot's right: front 0.47 m from the base, 0.17 m clear of the table. Board tops at z = −0.35, 0.05, 0.45, 0.95 and 1.30 m; the arm works on 0.05 (0.38 m clear above) and 0.45 (0.48 m) |
+| Shelf items | Sugar box on the 0.05 m board, Rubik's cube + foam brick on the 0.45 m board: stage 5 must find the space around them |
+| Fixed camera | RealSense D455 (NVIDIA model) on a floor tripod beyond the table's far side, 0.85–0.95 m from the targets, all five items in view. Pinhole 640×480, fx = fy = 615 ([D-007](DECISIONS.md#d-007)) |
+| Wrist camera | D455 flat on the side of the hand, looking along the fingers. `robot.look_joints` puts it at (0.12, −0.12, 0.90) looking into the shelf |
 
-| Camera rig | D455 model |
-|---|---|
-| ![Tripod rig](sim/rig.png) | ![D455 front](sim/d455.png) |
+Both camera bodies and the tripod are visual only (no colliders), and never appear in their own images.
 
-![Dataset camera view](sim/camera.png)
+| Camera rig | D455 model | Fixed camera view |
+|---|---|---|
+| ![Tripod rig](sim/rig.png) | ![D455 front](sim/d455.png) | ![Fixed camera](sim/camera.png) |
 
 ## Setup (once)
 
-Workstation, Cursor terminal. Isaac Sim gets its **own** venv (`.venv-sim`, Python 3.12), separate from
-the vision `.venv`. About 30–40 GB of downloads.
+Workstation terminal. Isaac Sim gets its own venv (Python 3.12, ~30–40 GB download).
 
 ```bash
 cd ~/workspace/prompt-pick-place
@@ -37,117 +44,81 @@ uv pip install --python .venv-sim/bin/python "isaacsim[all,extscache]==6.1.0.0" 
     --extra-index-url https://pypi.nvidia.com --index-strategy unsafe-best-match
 ```
 
-The first run asks you to accept the NVIDIA Omniverse EULA (type `Yes`, or set `OMNI_KIT_ACCEPT_EULA=YES`)
-and then compiles shaders: about **3 min** once. After that a whole `scene.py` run takes about **12 s**.
-The Franka asset is downloaded from NVIDIA's asset server (needs internet).
+The first run asks you to accept the NVIDIA Omniverse EULA (or set `OMNI_KIT_ACCEPT_EULA=YES`) and compiles shaders
+(~3 min, once). After that a `scene.py` run takes ~15 s. Robot and camera assets come from NVIDIA's asset server.
 
-## Commands
+## Datasets (`scene.py`)
 
 ```bash
-.venv-sim/bin/python sim/scene.py                 # 1 frame  -> data/sim/
-.venv-sim/bin/python sim/scene.py --frames 10     # 10 frames, new random target yaws each
-.venv-sim/bin/python sim/scene.py --livestream    # view only: stream the scene to the laptop (below)
-.venv-sim/bin/python sim/scene.py --livestream --arm look   # same, arm in its shelf-looking pose (see the wrist camera)
-.venv-sim/bin/python sim/scene.py --help
+.venv-sim/bin/python sim/scene.py                     # 1 frame -> data/sim/
+.venv-sim/bin/python sim/scene.py --frames 10         # 10 frames, new random target yaws each
+.venv-sim/bin/python sim/scene.py --overview docs/sim/overview.png   # the still above
 ```
 
-Then run stage 2 on a sim frame (host `.venv`, same as before), pointing `--data` at a target's folder.
-The mask defaults to the sim's ground-truth mask, and the report ends with the error against the ground-truth pose:
+Each frame: the table shot with the arm at home, then the arm moves to `look_joints` and the wrist camera takes the
+shelf shot. `data/sim/` (gitignored) is rewritten each run:
+
+| File | What |
+|---|---|
+| `scene/rgb/`, `scene/depth/` | Fixed camera: RGB, depth (uint16 **mm**, 0 = none) |
+| `scene/cam_K.txt`, `scene/T_base_cam.txt` | Intrinsics; **ground-truth** camera pose in the base frame (OpenCV optical frame) |
+| `<target>/masks/`, `<target>/ob_in_cam/` | The target's visible pixels (occlusion-aware); ground-truth pose in the camera frame |
+| `<target>/mesh` | → `assets/ycb/<target>/`: the same OBJ FoundationPose loads, so estimate and ground truth share one object frame |
+| `shelf/rgb/`, `shelf/depth/`, `shelf/T_base_cam.txt` | Wrist camera shot of the shelf, and its pose (= forward kinematics) |
+| `shelf/shelf.json` | Ground-truth shelf: board heights, footprint, thickness |
+
+Each `<target>/` is a complete FoundationPose dataset (`rgb`, `depth`, `cam_K.txt` link to `scene/`), so stage 2 runs
+on it directly and reports the error against ground truth:
 
 ```bash
 .venv/bin/python pipeline/interactive_pose.py --data data/sim/006_mustard_bottle --frame 0 --tag mustard0
-.venv/bin/python pipeline/interactive_pose.py --data data/sim/005_tomato_soup_can --frame 0 --tag tomato0
 #   ...
 #   vs ground truth: rotation 1.14 deg | translation 0.2 mm
 ```
 
-Measured on the 3 default frames (seed 0, L40S, camera ~0.75 m):
-
-| Target | Rotation error | Translation error |
+| Target (3 frames, seed 0) | Rotation error | Translation error |
 |---|---|---|
 | Mustard bottle (upright) | 0.49 / 1.48 / 0.92° | 0.7 / 0.2 / 0.6 mm |
 | Tomato can (lying) | 1.14 / 0.94 / 0.58° | 0.2 / 0.4 / 0.7 mm |
 
-~880 ms per registration; run-to-run spread on the same frame is ~0.5°. Sim depth is perfect and the mask is exact, so this is
-FoundationPose's best case. Real frames (noisy depth, YOLOE mask) will be worse. That gap is what to measure next.
+~0.9 s per registration. Sim depth is perfect and the masks exact: FoundationPose's best case ([I-015](DECISIONS.md#i-015)).
 
-## Output
+## Watching from the laptop (livestream)
 
-`data/sim/` (gitignored; wiped and rewritten each run). The images are shared; each target gets a complete
-FoundationPose-layout folder (same as `mustard0`) whose `rgb`, `depth` and `cam_K.txt` link to `scene/`:
-
-```
-data/sim/scene/                 rgb/ depth/ cam_K.txt T_base_cam.txt
-data/sim/006_mustard_bottle/    masks/ ob_in_cam/ mesh -> assets/ycb/006_mustard_bottle   (+ links to scene/)
-data/sim/005_tomato_soup_can/   masks/ ob_in_cam/ mesh -> assets/ycb/005_tomato_soup_can  (+ links to scene/)
-```
-
-| File | What |
-|---|---|
-| `scene/rgb/000000.png` | RGB |
-| `scene/depth/000000.png` | Depth, uint16 **millimetres** (0 = no depth) |
-| `scene/cam_K.txt` | 3×3 intrinsics |
-| `scene/T_base_cam.txt` | **Ground-truth extrinsics**: 4×4 camera (OpenCV frame) pose in the robot base frame (= world). Score a hand-eye calibration against this |
-| `<target>/masks/000000.png` | The target's **visible** pixels (255), from the semantic-segmentation render (occlusion-aware) |
-| `<target>/ob_in_cam/000000.txt` | **Ground-truth** 4×4 target pose in the camera frame (OpenCV: +z forward, +y down), metres |
-| `<target>/mesh/` | Symlink → `assets/ycb/<target>/` (`textured.obj` is what FoundationPose loads) |
-| `shelf/rgb/`, `shelf/depth/`, `shelf/cam_K.txt` | The wrist camera's shelf shot (stage 5) |
-| `shelf/T_base_cam.txt` | Wrist camera pose in the base frame at the shot, read from the sim (= forward kinematics) |
-| `shelf/shelf.json` | Ground-truth shelf: board heights, footprint, thickness |
-
-## Watching the scene from the laptop (livestream)
-
-The workstation renders and sends a video stream over WebRTC; the laptop only displays it (no GPU needed).
+The workstation renders; the laptop only shows a WebRTC stream.
 
 | Step | Where | What |
 |---|---|---|
-| 1 | Workstation (Cursor terminal) | `.venv-sim/bin/python sim/scene.py --livestream`, then wait for `[sim] streaming on ...` (~1 min) |
-| 2 | Laptop | Install the **Isaac Sim WebRTC Streaming Client** (Windows build, from the "Download Isaac Sim" page of the Isaac Sim docs; one-time) |
-| 3 | Laptop | Open it, enter server `192.168.33.118`, and connect |
+| 1 | Workstation | `.venv-sim/bin/python sim/ros_cell.py --livestream` (or `scene.py --livestream`), wait for `streaming on ...` |
+| 2 | Laptop | Install the **Isaac Sim WebRTC Streaming Client** (Windows build, "Download Isaac Sim" page; once) |
+| 3 | Laptop | Connect to `192.168.33.118` |
 
-- `--livestream` is **view only**: it builds the same scene (bottle dropped at a random yaw) and streams the
-  viewport, but saves no data (Replicator annotators never return while streaming). Capture with the normal
-  command; it can run at the same time.
-- Ports: TCP 49100 (signalling) + UDP 47998 (video). The workstation firewall is off. The laptop must be on
-  the same LAN (or a VPN into it): UDP can't go through the Cursor SSH tunnel.
-- Only one client at a time. Stop the server with Ctrl+C in its terminal.
-- **Live ROS cell:** `.venv-sim/bin/python sim/ros_cell.py --livestream` streams the same way while the ROS pipeline
-  runs. Unlike `scene.py --livestream`, it isn't view-only: the ROS cameras keep publishing (D-032).
+- Same LAN (or VPN) only: the video is UDP 47998 (+ TCP 49100 signalling), which the SSH tunnel can't carry. One client
+  at a time.
+- `scene.py --livestream` is view-only (Replicator never returns data while streaming, [I-002](DECISIONS.md#i-002));
+  add `--arm look` to show the shelf-looking pose. `ros_cell.py --livestream` keeps publishing its cameras.
+- The view: `config.yaml` `sim.viewport`.
 
-## Knobs
-
-All in `config.yaml` → `sim:`.
+## Knobs (`config.yaml`)
 
 | Knob | What |
 |---|---|
-| `objects` | List of `{name, xy, yaw_deg, tilt_deg, target}`: any YCB item prepared by `scripts/prepare_ycb.py`. `yaw_deg` fixed or `[lo, hi]` (random per frame); `tilt_deg: 90` = lying on its side; `target: true` = save its mask + ground-truth pose |
-| `shelf.center_xy / size / levels_z / board` | Shelf footprint, board heights, thickness |
-| `shelf_objects` | Items standing on the shelf: `{name, level, x, yaw_deg}` |
-| `wrist_camera.mount_xyz / mount_yaw_deg / look_joints` | Wrist camera lens position + roll on the hand; arm pose for the shelf shot |
-| `colors.*` | sRGB 0–1, as in a colour picker (the code converts to linear for USD) |
-| `camera.eye` / `camera.target` | Camera position and the point it looks at (world, metres). The rig follows automatically |
-| `camera.rig.*` | Tripod hub height, leg spread, leg directions (keep feet out from under the table), colours |
-| `camera.width/height/fx` | Intrinsics (square pixels, centred principal point) |
-| `settle_steps` | Physics + render steps before each capture (the drop must come to rest) |
+| `sim.objects` | `{name, xy, yaw_deg, tilt_deg, target}` per table item. `yaw_deg` fixed or `[lo, hi]` (random per frame); `tilt_deg: 90` = on its side; `target: true` = save mask + ground truth |
+| `sim.shelf`, `sim.shelf_objects` | Footprint, board heights, board and post thickness; items on the boards `{name, level, x, yaw_deg}` (level = index into `levels_z`) |
+| `robot.home_joints`, `robot.look_joints` | Home pose; the pose for the shelf shot |
+| `gripper.finger_extension` | Extra finger length (sim, MoveIt model, grasp model, TCP) |
+| `sim.gripper` | Finger drive: stiffness, max force (N), pad friction |
+| `sim.arm_drive` | Arm joint drive stiffness / damping |
+| `sim.camera`, `sim.wrist_camera` | Intrinsics, fixed camera eye / target, tripod; wrist mount |
+| `sim.colors` | sRGB 0–1 (converted to linear for USD) |
 
-## Isaac Sim 6.x notes
+## Isaac Sim 6.1 notes
 
-- `isaacsim.core.api` / `isaacsim.core.prims` still work in 6.1 but live in `extsDeprecated/`; the
-  replacement is `isaacsim.core.experimental.*`. The Franka example class (`isaacsim.robot.manipulators.examples`)
-  is **not** loaded by default, so `scene.py` references the Franka USD directly.
-- Joint positions **and** drive targets must both be set, or the arm sags back to all-zero joints.
-- The camera is a plain `UsdGeom.Camera` + Replicator annotators (`rgb`, `distance_to_image_plane`,
-  `semantic_segmentation`); these APIs are stable across 5.x / 6.x.
-- Livestream: enable `omni.kit.livestream.app` on the default headless app. The bundled
-  `isaacsim.exp.full.streaming.kit` experience hung during startup here. While streaming,
-  `rep.orchestrator.step()` and annotator `get_data()` block forever.
-- USD material colours are **linear**: an sRGB value used as-is renders much paler (0.42 → looks ~0.68).
-  Auto-exposure also hides lighting changes, so fix contrast through the colours, not the light intensities.
-- The pip package ships its own agent guides: `.venv-sim/lib/python3.12/site-packages/isaacsim/skills/`.
-
-## Next
-
-1. **ROS 2 bridge** (Jazzy, already installed): publish `/camera/color/image_raw`, `/camera/depth/image_raw`,
-   `/camera/camera_info`, `/tf`, `/joint_states`, `/clock` from this same scene.
-2. Thin ROS 2 nodes around `vision/` subscribe to those topics.
-3. MoveIt 2 → Franka closes the loop (pick the bottle).
+- `isaacsim.core.api` / `core.prims` still work but live in `extsDeprecated/`; the Franka example class isn't loaded,
+  so `cell.py` references the Franka USD directly ([I-004](DECISIONS.md#i-004)).
+- Set joint positions **and** drive targets, or the arm sags back to the drive targets ([I-005](DECISIONS.md#i-005)).
+- USD material colours are linear: an sRGB value used as-is renders much paler ([I-006](DECISIONS.md#i-006)).
+- The finger mimic joint drifts under a large squeeze: the articulation runs 64 solver iterations (default 32).
+- Livestream: `omni.kit.livestream.app` on the default headless app; the bundled streaming app hung at start
+  ([I-003](DECISIONS.md#i-003)).
+- The pip package ships agent guides: `.venv-sim/lib/python3.12/site-packages/isaacsim/skills/`.

@@ -34,7 +34,7 @@ def test_occupancy_and_clearance():
     assert grid.shape == (20, 20)
     assert (grid[:5, :5] == fs.OCCUPIED).all()
     assert grid[15, 15] == fs.FREE
-    clear = fs.clearance_map(grid, zone, 0.01)
+    clear = fs.clearance_map(grid, 0.01)
     assert clear[:5, :5].max() == 0.0
     # centre (0.505, -0.195): nearest blocked cell centre (0.455, -0.245), minus half a cell
-    assert abs(clear[10, 10] - (np.hypot(0.05, 0.05) - 0.005)) < 1e-9
+    assert abs(clear[10, 10] - (np.hypot(0.05, 0.05) - 0.005)) < 1e-6

@@ -29,12 +29,13 @@ Same scene as stages 1–3: `data/multi_object_scene/`. Mustard bottle only.
 
 ## Knobs
 
-Defaults: `config.yaml` → `gripper:` (Franka Panda hand) and `grasp:`. Flags override per run.
+Defaults: `config.yaml` → `gripper:` and `grasp:`. Flags override per run. This playground draws the stock Franka fingers;
+the robot cell's are 5 cm longer (`gripper.finger_extension`, [SIM.md](SIM.md)).
 
 | Knob | Flag | What it does | Default |
 |---|---|---|---|
 | `max_opening` | `--max-opening` | Widest the fingers open; wider object sides get no candidates | 0.08 m |
-| `finger_depth` | `--finger-depth` | How far the fingertips go past the grasped face | 0.03 m |
+| `finger_depth` | `--finger-depth` | How far the pads' centre (the TCP) goes past the grasped face | 0.045 m |
 | `width_margin` | `--width-margin` | Free opening needed beyond the object's width | 0.008 m |
 | `max_approach_tilt_deg` | `--max-tilt` | Max angle between the approach and straight down | 50° |
 | `table_clearance` | `--clearance` | Fingertips must stay this far above the RANSAC table | 0.012 m |
@@ -77,13 +78,13 @@ mesh box ─► candidates (faces × closing directions) ─► place with stage
 
 | # | Face | Tilt | Lowest point | Hits | Result |
 |---|---|---|---|---|---|
-| 0–1 | `+z` (top) | 2° | 157 mm | 0 | **best** |
-| 2–5 | `±x` (sides) | 88–92° | 90 mm | 0–3 | too tilted (pass with `--max-tilt 100`) |
-| 6–7 | `−z` (bottom) | 178° | 25 mm | 0 | too tilted |
+| 0–1 | `+z` (top) | 2° | 142 mm | 0 | **best** |
+| 2–5 | `±x` (sides) | 88–92° | 91 mm | 0 | too tilted (pass with `--max-tilt 100`) |
+| 6–7 | `−z` (bottom) | 178° | 40 mm | 0 | too tilted |
 
 - **Pairs.** `+y` / `−y` are the same grasp with the hand turned 180° — identical fingers, drawn on top of each other.
 - **Face names.** `+z/+y` = approach through the +z face (the cap), fingers close along ±y. The face letters are the *mesh's* axes (panel B's axes), not the table's.
-- **Lowest point** 157 mm for the top grasp: bottle top ~188 mm − 30 mm finger depth.
+- **Lowest point** 142 mm for the top grasp: bottle top ~188 mm − 45 mm finger depth.
 
 ## Poses & frames
 
@@ -107,9 +108,9 @@ Printed for the object and the best grasp (default run):
 |---|---|---|---|
 | object in camera | 164, −23, 769 | −151, −59, −129 | stage 2's output, 77 cm in front of the camera |
 | object in table | 129, 680, 92 | 1, 2, 110 | upright (roll/pitch ≈ 0), centre 92 mm up, turned 110° |
-| gripper in table | 129, 684, 180 | 179, −2, −71 | pointing straight down (roll 180°), jaw turned with the bottle (110° − 180°) |
-| gripper in camera | 155, −101, 728 | −29, 59, 51 | what a robot would get after hand-eye calibration |
-| gripper in object | 0, 0, 88 | 180, 0, 180 | the candidate itself: on the cap axis, 8 mm below the top (tips 30 mm below, frame 22.5 mm above them) |
+| gripper in table | 129, 683, 165 | 179, −2, −71 | pointing straight down (roll 180°), jaw turned with the bottle (110° − 180°) |
+| gripper in camera | 157, −88, 735 | −29, 59, 51 | what a robot would get after hand-eye calibration |
+| gripper in object | 0, 0, 73 | 180, 0, 180 | the candidate itself: on the cap axis, 23 mm below the top (TCP 45 mm below, frame 22.5 mm above it) |
 
 rpy = `R = Rz(yaw) · Ry(pitch) · Rx(roll)`. The filter's table + collision checks use the fingertips (the TCP), not this frame. The candidate table's last column is each grasp's TCP xyz in the table frame.
 
@@ -119,7 +120,7 @@ rpy = `R = Rz(yaw) · Ry(pitch) · Rx(roll)`. The filter's table + collision che
 |---|---|
 | `--max-tilt 100` | Side grasps pass. Which one is closest to the soup can? How many hits? |
 | `--max-opening 0.11` | The 96 mm side fits (96 + 8 mm margin): 16 candidates, 4 pass. Tilt ties at 2°, so the 96 mm grip ranks first — is that the one you'd pick? |
-| `--finger-depth 0.09` | The top grasp's lowest point drops 157 → 97 mm. Why does it stop there? (depth is capped at half the box) |
+| `--finger-depth 0.09` | The top grasp's lowest point drops 142 → 97 mm. Why does it stop there? (depth is capped at half the box) |
 | `--clearance 0.2` | Everything fails the table check. Why the top grasp too? |
 | `--pose it1` | Same grasps from a 1-iteration pose? |
 
@@ -128,5 +129,5 @@ rpy = `R = Rz(yaw) · Ry(pitch) · Rx(roll)`. The filter's table + collision che
 - **No IK / reachability.** There's no robot here; a "feasible" grasp only means the geometry works.
 - **Final pose only.** The collision check looks at where the gripper ends up, not the path it takes getting there.
 - **Only visible surfaces are obstacles.** Depth sees the front of each object; the back is unknown (grey in stage 3) and never collides.
-- **The bottle's 1 cm margin also hides neighbours.** Obstacle points within 1 cm of the bottle's box count as "bottle". That's why the soup can, right behind it, only produces 3 hits.
+- **The bottle's 1 cm margin also hides neighbours.** Obstacle points within 1 cm of the bottle's box count as "bottle". That is why the soup can, right behind it, produces almost no hits.
 - **Box, not shape.** Candidates come from the bounding box, so a grasp on the bottle's narrow neck is never proposed.

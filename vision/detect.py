@@ -55,10 +55,12 @@ def build_text_prompt_model(weights, texts, device='cuda:0'):
     model = YOLOE(weights_path(weights))
     cwd = os.getcwd()
     os.chdir(MODELS_DIR)  # ultralytics looks for / downloads mobileclip_blt.ts in the cwd
-    with warnings.catch_warnings():  # newer torch deprecates the jit.load used for mobileclip_blt.ts
-        warnings.filterwarnings('ignore', message='.*torch.jit.load.*', category=FutureWarning)
-        model.set_classes(texts, model.get_text_pe(texts))
-    os.chdir(cwd)
+    try:
+        with warnings.catch_warnings():  # newer torch deprecates the jit.load used for mobileclip_blt.ts
+            warnings.filterwarnings('ignore', message='.*torch.jit.load.*', category=FutureWarning)
+            model.set_classes(texts, model.get_text_pe(texts))
+    finally:
+        os.chdir(cwd)
     return model
 
 

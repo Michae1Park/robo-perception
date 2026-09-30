@@ -12,7 +12,7 @@ Output (<out>/, default data/sim/):
   <target>/  masks/000000.png (visible pixels = 255)  ob_in_cam/000000.txt (GT 4x4 pose, OpenCV camera frame)
              mesh -> assets/ycb/<target>/ (the OBJ FoundationPose uses); rgb, depth, cam_K.txt -> ../scene/
 
-Scene parameters: config.yaml `sim:`. No ROS here: the ROS 2 bridge comes later.
+Scene parameters: config.yaml `sim:`. The same cell live over ROS 2: sim/ros_cell.py.
 """
 import argparse
 import json
@@ -36,14 +36,6 @@ args = ap.parse_args()
 from isaacsim import SimulationApp  # noqa: E402  (must be created before any other omni/isaacsim import)
 
 app = SimulationApp({'headless': True, 'hide_ui': not args.livestream, 'width': 1280, 'height': 720})
-if args.livestream:
-    # WebRTC stream of the viewport (signal TCP 49100, media UDP 47998)
-    import carb
-    from isaacsim.core.utils.extensions import enable_extension
-    # no NvStreamer-*.etli event-trace files in the working directory
-    carb.settings.get_settings().set('/exts/omni.kit.livestream.app/primaryStream/enableEventTracing', False)
-    enable_extension('omni.kit.livestream.app')
-    print('[sim] livestream extension enabled', flush=True)
 
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402
@@ -51,11 +43,11 @@ import omni.replicator.core as rep  # noqa: E402
 
 sys.path.insert(0, REPO)
 sys.path.insert(0, os.path.join(REPO, 'sim'))
-from cell import (FRANKA_READY, YCB, ArticulationAction, add_camera, add_camera_rig, add_wrist_camera,  # noqa: E402
-                  build_scene, drop_all, move_arm, place_on_shelf, settle, world_pose_cv)
+from cell import (YCB, add_camera, add_camera_rig, add_wrist_camera, build_scene, drop_all,  # noqa: E402
+                  move_arm, place_on_shelf, reset_robot, set_viewport, settle, start_livestream, world_pose_cv)
+from pxr import Gf  # noqa: E402
 from vision import load_config  # noqa: E402
 from vision import transforms as tf  # noqa: E402
-from pxr import Gf  # noqa: E402
 
 
 def prepare_shelf_output(root, K, shelf_cfg):
@@ -90,7 +82,7 @@ def prepare_output(root, targets, K, T_world_cam):
     return scene
 
 
-def render_overview(world, franka, objects, shelf_objects, cfg, rng):
+def render_overview(world, franka, objects, shelf_objects, cfg, rng, look):
     """One high-res still of the cell for the docs: items dropped, arm looking at the shelf (wrist D455 visible)."""
     o = cfg['overview']
     w, h = o['size']
@@ -101,17 +93,16 @@ def render_overview(world, franka, objects, shelf_objects, cfg, rng):
     annot.attach(rep.create.render_product(path, (w, h)))
     drop_all(objects, rng)
     place_on_shelf(shelf_objects, cfg['shelf'])
-    move_arm(franka, np.array(cfg['wrist_camera']['look_joints']))
+    move_arm(franka, np.array(look))
     settle(world, cfg['settle_steps'] + o.get('extra_steps', 0))   # extra frames let the renderer converge
     cv2.imwrite(args.overview, np.asarray(annot.get_data())[..., 2::-1])
     print('[sim] overview -> %s (%dx%d)' % (args.overview, w, h))
 
 
-def stream(world):
+def stream(world, cfg):
     """View-only: the viewport (not the RGB-D sensor) is what the WebRTC client shows. Replicator annotators
-    never return data while streaming, so --livestream does not capture."""
-    from isaacsim.core.utils.viewports import set_camera_view
-    set_camera_view(eye=np.array([1.95, -0.25, 1.30]), target=np.array([0.30, -0.08, 0.10]))   # table, robot, shelf, rig
+    never return data while streaming, so --livestream does not capture (I-002)."""
+    set_viewport(cfg)
     print('[sim] streaming on TCP 49100 / UDP 47998 - connect the Isaac Sim WebRTC Streaming Client '
           'to this machine\'s IP. Ctrl+C to quit.', flush=True)
     while app.is_running():
@@ -119,8 +110,11 @@ def stream(world):
 
 
 def main():
-    cfg = load_config()['sim']
-    world, franka, objects, shelf_objects = build_scene(cfg)
+    if args.livestream:
+        start_livestream()
+    full = load_config()
+    cfg = full['sim']
+    world, franka, objects, shelf_objects = build_scene(cfg, full['gripper'])
     targets = [o['name'] for o, _, _ in objects if o.get('target')]
     cam_cfg = cfg['camera']
     cam_path, K, T_world_cam = add_camera(cam_cfg)
@@ -143,14 +137,12 @@ def main():
         for a in annot2.values():
             a.attach(rp2)
 
-    world.reset()
-    franka.set_joints_default_state(positions=FRANKA_READY)
-    franka.set_joint_positions(FRANKA_READY)
-    franka.apply_action(ArticulationAction(joint_positions=FRANKA_READY))   # drive targets, or it sags back to 0
+    robot = full['robot']
+    reset_robot(world, franka, robot['home_joints'])
     rng = np.random.default_rng(args.seed)
 
     if args.overview:
-        render_overview(world, franka, objects, shelf_objects, cfg, rng)
+        render_overview(world, franka, objects, shelf_objects, cfg, rng, robot['look_joints'])
         app.close()
         return
 
@@ -158,15 +150,15 @@ def main():
         drop_all(objects, rng)
         place_on_shelf(shelf_objects, cfg['shelf'])
         if args.arm == 'look':
-            move_arm(franka, np.array(wcfg['look_joints']))
-        stream(world)
+            move_arm(franka, np.array(robot['look_joints']))
+        stream(world, cfg)
         app.close()
         return
 
     prims = {o['name']: prim for o, prim, _ in objects}
     T_cam_world = tf.invert(T_world_cam)
     for i in range(args.frames):
-        move_arm(franka, FRANKA_READY[:7])                 # table shot: arm at home
+        move_arm(franka, np.array(robot['home_joints']))   # table shot: arm at home
         yaws = drop_all(objects, rng)
         place_on_shelf(shelf_objects, cfg['shelf'])
         settle(world, cfg['settle_steps'])
@@ -190,7 +182,7 @@ def main():
             print('[sim] frame %s %-20s yaw %6.1f deg, %.3f m from camera, mask %5d px'
                   % (fid, n, yaws[n], np.linalg.norm(ob_in_cam[:3, 3]), mask.sum()))
 
-        move_arm(franka, np.array(wcfg['look_joints']))    # shelf shot: arm in its looking pose
+        move_arm(franka, np.array(robot['look_joints']))   # shelf shot: arm in its looking pose
         settle(world, cfg['settle_steps'])
         T_base_wrist = world_pose_cv(shelf_path)            # base = world origin
         np.savetxt(os.path.join(shelf_dir, 'T_base_cam.txt'), T_base_wrist)

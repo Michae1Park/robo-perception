@@ -5,15 +5,18 @@ config/calibration.yaml), and the ros2_control controllers. The controller_manag
   ros2 launch ppp_bringup robot.launch.py [foxglove:=true]
 """
 import os
+import sys
 
 import yaml
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from ament_index_python.packages import get_package_share_directory
-from moveit_configs_utils import MoveItConfigsBuilder
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from common import moveit_config  # noqa: E402
 
 SHARE = get_package_share_directory('ppp_bringup')
 
@@ -28,7 +31,7 @@ def static_tf(name, e):
 
 
 def generate_launch_description():
-    moveit = MoveItConfigsBuilder('moveit_resources_panda').to_moveit_configs()
+    moveit = moveit_config()
     with open(os.path.join(SHARE, 'config', 'calibration.yaml')) as f:
         calib = yaml.safe_load(f)
     controllers = os.path.join(SHARE, 'config', 'ros2_controllers.yaml')
