@@ -18,7 +18,7 @@ PY = '/opt/conda/envs/my/bin/python3'  # the container's python
 if not os.path.exists(PY):  # on the host: run this same command inside the container
     subprocess.run(['docker', 'start', 'foundationpose'], stdout=subprocess.DEVNULL)
     sys.exit(subprocess.run(['docker', 'exec', 'foundationpose', 'bash', '-lc', 'cd %s && %s %s && chown -R %d:%d output'
-                             % (REPO, PY, shlex.join(sys.argv), os.getuid(), os.getgid())]).returncode)
+                             % (REPO, PY, shlex.join([os.path.abspath(sys.argv[0])] + sys.argv[1:]), os.getuid(), os.getgid())]).returncode)
 
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402

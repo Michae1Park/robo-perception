@@ -217,7 +217,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# prompt-pick-place
+# robo-perception
 PLAN.md
 assets/ycb/
 models/

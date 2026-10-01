@@ -2,15 +2,15 @@
 
 ## Commands
 
-Cursor terminal on the workstation, host `.venv` (numpy + OpenCV only). Run stage 2 first (`interactive_pose.py`) — this reads its pose.
+Cursor terminal on the workstation, host `.venv` (numpy + OpenCV only). Run stage 2 first (`02_pose.py`) — this reads its pose.
 
 ```bash
-source .venv/bin/activate                                                  # once per terminal
-python pipeline/interactive_grasp.py                                       # config.yaml defaults
-python pipeline/interactive_grasp.py --max-tilt 100 --tag side             # allow side grasps
-python pipeline/interactive_grasp.py --max-opening 0.11 --tag wide         # a wider gripper
-python pipeline/interactive_grasp.py --pose it1 --tag it1                  # grasps from another stage 2 run
-python pipeline/interactive_grasp.py --help
+source .venv/bin/activate                                 # once per terminal
+python pipeline/04_grasp.py                               # config.yaml defaults
+python pipeline/04_grasp.py --max-tilt 100 --tag side     # allow side grasps
+python pipeline/04_grasp.py --max-opening 0.11 --tag wide # a wider gripper
+python pipeline/04_grasp.py --pose it1 --tag it1          # grasps from another stage 2 run
+python pipeline/04_grasp.py --help
 ```
 Prints a candidate table, saves `output/grasp/<tag>.png` (2 panels), opens it as a Cursor tab.
 

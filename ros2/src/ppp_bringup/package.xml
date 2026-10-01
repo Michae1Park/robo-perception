@@ -2,7 +2,7 @@
 <package format="3">
   <name>ppp_bringup</name>
   <version>0.1.0</version>
-  <description>Launch files and cell configuration for prompt-pick-place: robot, MoveIt 2, perception, task.</description>
+  <description>Launch files and cell configuration for robo-perception: robot, MoveIt 2, perception, task.</description>
   <maintainer email="parkmjb@gmail.com">Michael Park</maintainer>
   <license>MIT</license>
   <buildtool_depend>ament_cmake</buildtool_depend>

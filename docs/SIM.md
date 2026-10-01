@@ -64,7 +64,7 @@ Each `<target>/` is a complete FoundationPose dataset (`rgb`, `depth`, `cam_K.tx
 on it directly and reports the error against ground truth:
 
 ```bash
-.venv/bin/python pipeline/interactive_pose.py --data data/sim/006_mustard_bottle --frame 0 --tag mustard0
+.venv/bin/python pipeline/02_pose.py --data data/sim/006_mustard_bottle --frame 0 --tag sim_mustard
 #   ...
 #   vs ground truth: rotation 1.14 deg | translation 0.2 mm
 ```

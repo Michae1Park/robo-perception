@@ -6,14 +6,14 @@ Cursor, connected to the workstation. Everything runs there.
 
 **CLI** (terminal: `` Ctrl+` ``)
 ```bash
-source .venv/bin/activate                                                       # once per terminal
-python pipeline/interactive_detect.py --text "mustard bottle"                   # text prompt
-python pipeline/interactive_detect.py --text "mustard bottle" --text banana     # several classes
-python pipeline/interactive_detect.py --ref 006_mustard_bottle                  # visual prompt (ready-made)
-python pipeline/interactive_detect.py --prompt my_obj ref.png 120,80,340,410    # visual prompt (your own)
-python pipeline/interactive_detect.py --prompt-free --conf 0.25                 # no prompt
-python pipeline/interactive_detect.py --text "mustard bottle" --imgsz 1280 --tag hi_res
-python pipeline/interactive_detect.py --help
+source .venv/bin/activate                                           # once per terminal
+python pipeline/01_detect.py --text "mustard bottle"                # text prompt
+python pipeline/01_detect.py --text "mustard bottle" --text banana  # several classes
+python pipeline/01_detect.py --ref 006_mustard_bottle               # visual prompt (ready-made)
+python pipeline/01_detect.py --prompt my_obj ref.png 120,80,340,410 # visual prompt (your own)
+python pipeline/01_detect.py --prompt-free --conf 0.25              # no prompt
+python pipeline/01_detect.py --text "mustard bottle" --imgsz 1280 --tag hi_res
+python pipeline/01_detect.py --help
 ```
 Prints a table, saves `output/yoloe/<tag>.png`, opens it as a Cursor tab (refreshes on re-run).
 

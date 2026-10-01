@@ -1,4 +1,4 @@
-# prompt-pick-place
+# robo-perception
 
 **Vision-driven pick-and-place from a prompt.** Show the robot one example image (or type a phrase), and it
 finds that object on the table, estimates its 6-DoF pose, plans a grasp, and finds free space on a shelf to
@@ -62,8 +62,8 @@ The whole task uses 12 GB of VRAM and 18 GB of RAM.
 **Development (native).** One script, on the workstation:
 
 ```bash
-git clone https://github.com/Michae1Park/prompt-pick-place.git
-cd prompt-pick-place
+git clone https://github.com/Michae1Park/robo-perception.git
+cd robo-perception
 scripts/install.sh
 ```
 
@@ -127,6 +127,17 @@ docker compose -f docker/compose.yaml run --rm task  # terminal 2, once terminal
 | **First start** | ~2 min to build the TensorRT engines and a few more for Isaac Sim's shaders. Both are kept in Docker volumes, so later starts are fast |
 | **Changing code** | Every change needs an image rebuild (step 2), which is slow. Develop natively; use Docker to deploy |
 
+**Data and model weights.** Meshes and weights are not in git; both install paths download them, so nothing is
+fetched by hand (except for stage 2's playground: [its own setup](#stage-2-setup-nvlabs-foundationpose-container)).
+Docker needs network access during `build`.
+
+| What | Where | Source | Native | Docker |
+|---|---|---|---|---|
+| YCB meshes (6 objects), centred and yaw-aligned | `assets/ycb/` | [YCB benchmark](https://www.ycbbenchmarks.com/) google_16k scans (`scripts/prepare_ycb.py`) | `assets` step | baked into both images at `build` |
+| YOLOE weights + MobileCLIP text encoder | `models/` | Ultralytics releases | `assets` step; any other `weights` in `config.yaml` downloads on first use | baked into the app image at `build` |
+| FoundationPose ONNX models | `models/isaac_ros/foundationpose/` | NGC, `nvidia/isaac/foundationpose` 1.0.1 (`docker/fp_run.sh`) | `fp` step | first start of `foundationpose`, kept in the `fp-engines` volume |
+| FoundationPose TensorRT engines | same | built for your GPU by `trtexec` | `fp` step | same |
+
 ## Vision playgrounds (each stage on its own)
 
 **Not part of the robot pipeline.** Each command runs one vision algorithm by itself on a stored RGB-D scene: no
@@ -135,20 +146,41 @@ report and writes an annotated image to `output/`.
 
 ```bash
 source .venv/bin/activate
-python pipeline/interactive_detect.py --ref 006_mustard_bottle     # 1 detect
-python pipeline/interactive_pose.py                                 # 2 pose (needs the NVlabs container, below)
-python pipeline/interactive_spatial.py                              # 3 table + free space
-python pipeline/interactive_grasp.py                                # 4 grasp
-python pipeline/interactive_place.py                                # 5 place (needs the sim capture below)
-.venv-sim/bin/python sim/scene.py                                   # Isaac Sim: RGB-D + ground truth -> data/sim/
+python pipeline/01_detect.py --ref 006_mustard_bottle # 1 detect
+python pipeline/02_pose.py                            # 2 pose (needs the stage 2 setup below)
+python pipeline/03_spatial.py                         # 3 table + free space
+python pipeline/04_grasp.py                           # 4 grasp
+python pipeline/05_place.py                           # 5 place (needs the sim capture below)
+.venv-sim/bin/python sim/scene.py                     # Isaac Sim: RGB-D + ground truth -> data/sim/
 ```
 
-Stage 2's playground runs NVlabs' research FoundationPose in a container named `foundationpose` that
-`scripts/install.sh` does not set up yet; the robot uses Isaac ROS FoundationPose instead and doesn't need it.
+### Stage 2 setup (NVlabs FoundationPose container)
+
+**Only for `02_pose.py`.** Stage 2's playground runs NVlabs' research FoundationPose in a container named
+`foundationpose`. `scripts/install.sh` does not set it up: the robot uses Isaac ROS FoundationPose instead, and the
+other playgrounds don't need it. Once, on the workstation, from the repo root (~36 GB image):
+
+```bash
+# 1 · NVlabs' code (pinned commit) and its network weights (Google Drive, 250 MB)
+git clone https://github.com/NVlabs/FoundationPose third_party/FoundationPose
+git -C third_party/FoundationPose checkout a1b694b
+.venv/bin/pip install gdown
+.venv/bin/gdown --folder https://drive.google.com/drive/folders/1DFezOAD0oD1BblsXVxqDsl8fj0qzB82i \
+  -O third_party/FoundationPose/weights
+
+# 2 · The container: a community build of NVlabs' image for CUDA 12.1 GPUs, the repo mounted at the same path
+docker run -d --name foundationpose --gpus all --network host -v "$PWD:$PWD" \
+  shingarey/foundationpose_custom_cuda121:latest sleep infinity
+
+# 3 · Build FoundationPose's CUDA extensions inside it
+docker exec foundationpose bash -lc "cd $PWD/third_party/FoundationPose && bash build_all.sh"
+```
+
+`02_pose.py` (and `render_mesh.py`) then start the container themselves and run inside it, also after a reboot.
 
 ## Run the robot
 
-Three terminals, **all on the workstation**, each starting from the repo root (`cd ~/workspace/prompt-pick-place`).
+Three terminals, **all on the workstation**, each starting from the repo root (`cd ~/workspace/robo-perception`).
 Install first: [Install](#install).
 
 | Terminal | Starts | Ready when it prints |
@@ -168,7 +200,7 @@ Terminal 3, the two options:
 ### Terminal 1 · sim
 
 ```bash
-cd ~/workspace/prompt-pick-place
+cd ~/workspace/robo-perception
 .venv-sim/bin/python sim/ros_cell.py
 ```
 
@@ -177,7 +209,7 @@ To watch the sim's viewport from a laptop, add `--livestream` ([below](#sim-view
 ### Terminal 2 · robot, MoveIt, perception
 
 ```bash
-cd ~/workspace/prompt-pick-place
+cd ~/workspace/robo-perception
 source ros2/install/setup.bash && ros2 launch ppp_bringup all.launch.py eval:=true
 ```
 
@@ -186,7 +218,7 @@ The robot stays still until terminal 3 gives it a task.
 ### Terminal 3, option A · web page
 
 ```bash
-cd ~/workspace/prompt-pick-place
+cd ~/workspace/robo-perception
 source ros2/install/setup.bash && .venv/bin/python ui/prompt_ui.py
 ```
 
@@ -211,7 +243,7 @@ Options: `--port` (default 8088), `--camera` / `--wrist-camera` (image topics). 
 ### Terminal 3, option B · scripted
 
 ```bash
-cd ~/workspace/prompt-pick-place
+cd ~/workspace/robo-perception
 source ros2/install/setup.bash && ros2 launch ppp_bringup task.launch.py   # every target, one after the other
 ```
 
@@ -250,14 +282,14 @@ hostname -I | awk '{print $1}'        # e.g. 192.168.33.118 -> <workstation-ip> 
 **2 · Start the sim with streaming.** Either type it in a workstation terminal (e.g. Cursor's):
 
 ```bash
-cd ~/workspace/prompt-pick-place
+cd ~/workspace/robo-perception
 .venv-sim/bin/python sim/ros_cell.py --livestream
 ```
 
 or start it from the laptop in one line (PowerShell or any terminal; the sim stops when this window closes):
 
 ```bash
-ssh -t <user>@<workstation-ip> "cd ~/workspace/prompt-pick-place && .venv-sim/bin/python sim/ros_cell.py --livestream"
+ssh -t <user>@<workstation-ip> "cd ~/workspace/robo-perception && .venv-sim/bin/python sim/ros_cell.py --livestream"
 ```
 
 Wait until it prints both lines:
@@ -291,7 +323,7 @@ This is terminal 1: start terminals 2 and 3 as usual.
 **1 · Workstation**, terminal 2 with the bridge:
 
 ```bash
-cd ~/workspace/prompt-pick-place
+cd ~/workspace/robo-perception
 source ros2/install/setup.bash && ros2 launch ppp_bringup all.launch.py eval:=true foxglove:=true
 ```
 
@@ -321,14 +353,14 @@ source ros2/install/setup.bash && ros2 launch ppp_bringup all.launch.py eval:=tr
 | Path | Contents |
 |---|---|
 | `vision/` | The algorithms: `detect`, `pose`, `spatial`, `grasp`, `place`, `transforms` |
-| `pipeline/` | Offline stage playgrounds (`interactive_*.py`) and the scripted mustard0 run; not used by the robot |
+| `pipeline/` | Offline stage playgrounds (`01_detect.py` … `05_place.py`); not used by the robot |
 | `sim/` | Isaac Sim cell (`cell.py`): dataset capture (`scene.py`), live over ROS 2 (`ros_cell.py`), episodes |
 | `ros2/src/` | ROS 2 packages: `ppp_interfaces`, `ppp_geometry` (C++ RANSAC + pybind11), `ppp_spatial`, `ppp_perception`, `ppp_task` (behavior tree), `ppp_bringup` |
 | `docker/` | Images (FoundationPose; deployment), `compose.yaml`, FoundationPose start scripts |
 | `ui/` | Prompt UI: web page to prompt the robot with a phrase or an example image (`prompt_ui.py`) |
 | `config.yaml` | Every tunable parameter, per stage and for the sim |
 | `data/` | Multi-object RGB-D scene (BOP YCB-Video) + reference crops; sim captures (generated) |
-| `scripts/` | `install.sh` (everything, one script), YCB mesh preparation |
+| `scripts/` | `install.sh` (everything, one script), YCB mesh download + preparation |
 | `docs/` | Stage guides, sim guide, decision log, figures |
 | `tests/` | Unit tests for `vision/` + C++/numpy RANSAC equivalence (`pytest`, no GPU) |
 

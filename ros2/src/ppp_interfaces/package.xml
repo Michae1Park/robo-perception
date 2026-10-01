@@ -2,7 +2,7 @@
 <package format="3">
   <name>ppp_interfaces</name>
   <version>0.1.0</version>
-  <description>Messages and services of the prompt-pick-place pipeline (one service per perception stage).</description>
+  <description>Messages and services of the robo-perception pipeline (one service per perception stage).</description>
   <maintainer email="parkmjb@gmail.com">Michael Park</maintainer>
   <license>MIT</license>
   <buildtool_depend>ament_cmake</buildtool_depend>

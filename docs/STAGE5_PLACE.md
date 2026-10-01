@@ -5,13 +5,13 @@
 Cursor terminal on the workstation, host `.venv` (numpy + OpenCV only). Needs `data/sim/shelf/` — make it once with the sim:
 
 ```bash
-.venv-sim/bin/python sim/scene.py                                                   # Isaac Sim: writes data/sim/shelf/ (~15 s)
-source .venv/bin/activate                                                           # once per terminal
-python pipeline/interactive_place.py                                                # where does the mustard bottle fit?
-python pipeline/interactive_place.py --object 005_tomato_soup_can --tag soup        # a smaller object
-python pipeline/interactive_place.py --hand-clearance 0.15 --tag bighand            # a bulkier hand above the object
-python pipeline/interactive_place.py --margin 0.04 --tag margin                     # keep 4 cm from everything
-python pipeline/interactive_place.py --help
+.venv-sim/bin/python sim/scene.py                                   # Isaac Sim: writes data/sim/shelf/ (~15 s)
+source .venv/bin/activate                                           # once per terminal
+python pipeline/05_place.py                                         # where does the mustard bottle fit?
+python pipeline/05_place.py --object 005_tomato_soup_can --tag soup # a smaller object
+python pipeline/05_place.py --hand-clearance 0.15 --tag bighand     # a bulkier hand above the object
+python pipeline/05_place.py --margin 0.04 --tag margin              # keep 4 cm from everything
+python pipeline/05_place.py --help
 ```
 Prints supports + candidates, saves `output/place/<tag>.png` (3 panels), opens it as a Cursor tab.
 

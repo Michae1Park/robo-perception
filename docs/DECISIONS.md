@@ -61,6 +61,9 @@ along the way. Newest entries go at the bottom of each list.
 | [D-046](#d-046) | 2026-09-30 | Demo GIF at a variable speed: the prompting slow, the robot fast | Accepted |
 | [D-047](#d-047) | 2026-10-01 | README demo as two GIFs (text prompt, visual prompt) at 1280 px so the prompt UI is readable | Accepted |
 | [D-048](#d-048) | 2026-10-01 | Demo re-recorded sharp: UI screencast frames at a 1280 px layout, sim at 1080p; prompt UI as SVG | Accepted |
+| [D-049](#d-049) | 2026-10-01 | README documents where meshes and weights come from; mustard0 demo data stays a manual download | Superseded by D-050 (mustard0); data and weights docs still Accepted |
+| [D-050](#d-050) | 2026-10-01 | Scripted mustard0 run removed; the playgrounds take its numbered names (`01_detect.py` … `05_place.py`) | Accepted |
+| [D-051](#d-051) | 2026-10-01 | Stage 2's NVlabs FoundationPose container: setup commands in the README, outside `install.sh` | Accepted |
 
 ### D-001
 **Keep YOLOE-seg (not OWLv2 + SAM2).** One `ultralytics` model gives box + mask in a single pass and was
@@ -483,6 +486,39 @@ the visual prompt first; `demo_gif.py` follows `events.json` `order`. GIFs at `-
 --dither none`: 9.3 MB (image) and 12.8 MB (text). The README's UI screenshot is now `docs/ui/prompt_ui.svg`
 (`scripts/ui_svg.py`, taken by `record_demo.py` after the first pick): boxes and text as vectors, with `textLength` so
 they keep their width in any font, and the images embedded as JPEGs from a 2× screenshot (134 KB).
+
+### D-049
+**Data and weights documented; mustard0 stays manual.** Nothing outside git was explained in the README, so it was
+unclear whether a fresh clone needs manual downloads. It doesn't for the robot: `install.sh assets` fetches the YCB
+meshes (`prepare_ycb.py`, YCB S3) and YOLOE + MobileCLIP (Ultralytics), `install.sh fp` fetches FoundationPose's ONNX
+models from NGC and builds the engines, and Docker does the same (assets baked in at `build`, ONNX + engines on the
+`foundationpose` service's first start, kept in `fp-engines`). The README's Install section now has a table of each
+asset, its source and which step fetches it. The one gap is the scripted run (`pipeline/01_detect.py` … `04_grasp.py`),
+which reads NVlabs' mustard0 from `third_party/FoundationPose/demo_data/`: NVlabs shares it only as a Google Drive
+folder, which can't be fetched reliably by a script (gdown on folders breaks on quota and listing limits), so the README
+gives the clone + download steps instead of `install.sh` fetching it. The `interactive_*.py` playgrounds don't need it.
+
+### D-050
+**Scripted mustard0 run removed; playgrounds numbered.** `pipeline/01_detect.py` … `04_grasp.py` and `run_all.sh` were
+the first pass at stages 1–4, on NVlabs' mustard0 sequence. The `interactive_*.py` playgrounds replaced them on
+`data/multi_object_scene/` (in git), and nothing else used them, so [D-049](#d-049)'s manual Google Drive download was
+only there to keep dead scripts runnable. Removed: the four scripts, `run_all.sh`, `interactive_pose.py`'s `--mask
+stage1` (read `01_detect.py`'s output) and its mustard0 defaults, the notebook's optional mustard0 frames, and the
+README's download steps. The stage number in the name reads better, so the playgrounds took the freed names:
+`interactive_{detect,pose,spatial,grasp,place}.py` → `01_detect.py` … `05_place.py` (older entries keep the old
+names). `02_pose.py` now re-runs itself in the container by absolute path, so it works from any directory. With this, a
+fresh clone needs no manual downloads for the robot or the playgrounds except stage 2's NVlabs container.
+
+### D-051
+**Stage 2 container setup documented, not installed.** `02_pose.py` and `render_mesh.py` need NVlabs' research
+FoundationPose in a container named `foundationpose`; the README only said `install.sh` doesn't set it up, so a fresh
+clone couldn't run stage 2's playground. Its setup was written down once and dropped in the README rewrite. Now a README
+section, *Stage 2 setup*, gives the commands: clone NVlabs at the pinned `a1b694b`, weights with `gdown --folder` from
+their Drive (checksums match the working copy), `docker run` of `shingarey/foundationpose_custom_cuda121` (NVlabs' image
+targets older GPUs; this is what runs on the L40S) with the repo mounted at its own path, then `build_all.sh` inside.
+Verified from scratch in a throwaway container: extensions build and both networks load. Kept out of `install.sh` because
+only one playground needs it, and it adds a 36 GB image plus a Drive download to an install the robot doesn't need. Both
+scripts now re-run themselves in the container by absolute path, so they work from any directory.
 
 ## Issues
 

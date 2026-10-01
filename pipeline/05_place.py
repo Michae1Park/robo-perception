@@ -2,9 +2,9 @@
 """Stage 5 playground: wrist-camera RGB-D of the shelf -> horizontal supports -> free space -> where the object fits.
 Guide: docs/STAGE5_PLACE.md. Host .venv (numpy + OpenCV only). Data: data/sim/shelf/ from sim/scene.py.
 
-  python pipeline/interactive_place.py                          # place the mustard bottle, config.yaml `place:`
-  python pipeline/interactive_place.py --object 005_tomato_soup_can --tag soup
-  python pipeline/interactive_place.py --hand-clearance 0.15 --tag bighand
+  python pipeline/05_place.py                          # place the mustard bottle, config.yaml `place:`
+  python pipeline/05_place.py --object 005_tomato_soup_can --tag soup
+  python pipeline/05_place.py --hand-clearance 0.15 --tag bighand
 
 Writes output/place/<tag>.png and opens it in Cursor.
 """
