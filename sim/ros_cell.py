@@ -52,6 +52,7 @@ ap.add_argument('--record', metavar='DIR',
                 help='save the demo-video view (config sim.record) to DIR/<wall time ms>.jpg for a demo video (D-045). '
                      'Not with --livestream (streaming stalls Replicator)')
 ap.add_argument('--record-hz', type=float, default=15.0, help='--record frame rate (sim time)')
+ap.add_argument('--record-size', type=int, nargs=2, default=[1280, 720], metavar=('W', 'H'), help='--record image size')
 args = ap.parse_args()
 if args.record and args.livestream:
     ap.error('--record and --livestream: streaming stalls Replicator annotators')
@@ -121,7 +122,7 @@ def pose_msg(T, t):
 
 
 class Recorder:
-    """The demo-video view (config sim.record), 1280x720, written as JPEGs named by wall time (ms), so
+    """The demo-video view (config sim.record), written as JPEGs named by wall time (ms), so
     they line up with a screen recording of the prompt UI. Written from a thread: the sim loop only copies the frame."""
 
     def __init__(self, cfg, out_dir, w=1280, h=720):
@@ -368,7 +369,7 @@ def main():
     add_camera_rig(T_world_cam, -cfg['table_size'][2], cam_cfg['rig'])
     wrist_path = add_wrist_camera(cam_cfg, cfg['wrist_camera'])
     add_clock_graph()
-    recorder = Recorder(cfg, args.record) if args.record else None
+    recorder = Recorder(cfg, args.record, *args.record_size) if args.record else None
 
     w, h = cam_cfg['width'], cam_cfg['height']
     cams = [RGBDPublisher(node, cam_path, '/camera', 'camera_color_optical_frame', K, w, h),

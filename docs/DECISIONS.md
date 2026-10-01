@@ -58,6 +58,9 @@ along the way. Newest entries go at the bottom of each list.
 | [D-043](#d-043) | 2026-09-30 | One FoundationPose for every object (mesh loaded per request); all five table objects are targets | Accepted |
 | [D-044](#d-044) | 2026-09-30 | One install script for development; Docker images for deployment only | Accepted |
 | [D-045](#d-045) | 2026-09-30 | Demo GIF: the prompt UI and the sim recorded separately, joined on wall time | Accepted |
+| [D-046](#d-046) | 2026-09-30 | Demo GIF at a variable speed: the prompting slow, the robot fast | Accepted |
+| [D-047](#d-047) | 2026-10-01 | README demo as two GIFs (text prompt, visual prompt) at 1280 px so the prompt UI is readable | Accepted |
+| [D-048](#d-048) | 2026-10-01 | Demo re-recorded sharp: UI screencast frames at a 1280 px layout, sim at 1080p; prompt UI as SVG | Accepted |
 
 ### D-001
 **Keep YOLOE-seg (not OWLv2 + SAM2).** One `ultralytics` model gives box + mask in a single pass and was
@@ -451,6 +454,35 @@ writer thread keeps the sim loop to a copy). `scripts/record_demo.py` drives the
 (Playwright: a text prompt, then an example image) and records the page; `scripts/demo_gif.py` puts both on the page
 video's timeline (UI on top, sim below), speeds it up and writes GIFs with a palette per clip. Not the livestream: it
 stalls Replicator annotators ([D-032](#d-032)), and a screen recording of the WebRTC client would need the laptop.
+
+### D-046
+**Variable-speed demo GIF.** One speed for the whole clip ([D-045](#d-045)) can't fit two picks into 20–30 s while the
+prompting stays readable: at 4× the typing and the image choice flash past, and the clip is still ~45 s.
+`demo_gif.py --motion-speed N` cuts the clip at the `events.json` marks: the prompting (page load, typing or choosing the
+image, and `--hold` s after Go for the detection) runs at `--prompt-speed` (1.5×), each task at N. The corner badge shows
+the current speed. Plain `--speeds` still makes the uniform GIFs. The sim now goes on top and the UI below, and
+`--colors` / `--dither` shrink the file: a 26 s GIF is 30 MB at the defaults, 8.9 MB at `--width 640 --colors 64
+--dither none`.
+
+### D-047
+**Two README GIFs at 1280 px.** At 640 px the 1600×780 UI recording is scaled to 0.4×, so the prompt text, the Text /
+Image tabs and the "Found" line can't be read on GitHub, and the text vs. visual prompting isn't visible. One GIF at
+1280 px was 31–42 MB (the fast sim motion is most of the bytes); 960 px was 13.5 MB and only just readable.
+`demo_gif.py --split` cuts the same recording after the text prompt's task into `docs/demo_text.gif` and
+`docs/demo_image.gif`, each under its own heading in the README (visual prompt first); at `--width 1280 --colors 48 --fps 8 --dither none` (the sim at its
+native width, the UI at 0.8×) they are 10.3 and 11.1 MB. Supersedes the single GIF of [D-046](#d-046).
+Text prompt first again, in recording order: the visual-prompt clip opens on the end of the text pick.
+
+### D-048
+**Sharper demo recording.** The D-047 GIFs were still blurry: the page was laid out at 1600 CSS px (so scaled to 0.8× in
+a 1280 px GIF, and to ~0.55× in GitHub's column), and Playwright's video is a low-bitrate VP8. `record_demo.py` now
+lays the page out at 1280 px (`ui/index.html` keeps the three camera views in a row down to 1200 px) and saves Chrome's
+screencast frames as JPEGs named by wall time, like the sim's (`ros_cell.py --record-size 1920 1080`). The screencast
+comes at CSS px even with `--scale 2`, so the UI is 1:1 in a 1280 px GIF. `--order image,text` (the default) records
+the visual prompt first; `demo_gif.py` follows `events.json` `order`. GIFs at `--split --width 1280 --colors 48 --fps 8
+--dither none`: 9.3 MB (image) and 12.8 MB (text). The README's UI screenshot is now `docs/ui/prompt_ui.svg`
+(`scripts/ui_svg.py`, taken by `record_demo.py` after the first pick): boxes and text as vectors, with `textLength` so
+they keep their width in any font, and the images embedded as JPEGs from a 2× screenshot (134 KB).
 
 ## Issues
 

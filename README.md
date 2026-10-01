@@ -9,6 +9,21 @@ put it — with no object-specific training and no prior model of the shelf.
 *Simulated cell (Isaac Sim 6.1): Franka Panda with lengthened fingers, a table of YCB objects, a metal pantry as the
 place target, a fixed RealSense D455 over the table, and a wrist-mounted D455 that looks into the shelf.*
 
+### Demo: visual prompt
+
+<p align="center">
+  <img src="docs/demo_image.gif" width="1280" alt="Visual prompt: an example image of a tomato soup can is chosen and boxed in the prompt UI, the robot finds the can lying on the table and puts it on the shelf; the sim on top, the prompt UI below"><br>
+  <em>Example image of a tomato soup can → the can lying on the table, from the <a href="#terminal-3-option-a--web-page">Prompt UI</a>. Prompting at 1.5×, robot motion at 8×.</em>
+</p>
+
+### Demo: text prompt
+
+<p align="center">
+  <img src="docs/demo_text.gif" width="1280" alt="Text prompt: 'the yellow bottle' is typed into the prompt UI, the robot finds the mustard bottle and puts it on the shelf; the sim on top, the prompt UI below"><br>
+  <em>Typed phrase "the yellow bottle" → mustard bottle.
+  Prompting at 1.5×, robot motion at 8×.</em>
+</p>
+
 ## Pipeline
 
 ![Pipeline: the prompt and two RGB-D cameras feed five stages (detect, pose, table, grasp, place); a grasp and a placement are chosen together, and the task manager executes the pick and the place with MoveIt 2](docs/pipeline.svg)
@@ -177,7 +192,7 @@ source ros2/install/setup.bash && .venv/bin/python ui/prompt_ui.py
 
 Then open **http://localhost:8088** (from a laptop: [below](#prompt-ui-in-the-laptops-browser)).
 
-![Prompt UI: text or image prompt, task steps, live fixed and wrist cameras, and what the robot detected](docs/ui/prompt_ui.png)
+![Prompt UI after an image prompt: the example image of the tomato soup can with its box, the task steps all done, live fixed and wrist cameras, and what the robot detected](docs/ui/prompt_ui.svg)
 
 *The **Prompt UI**: type a phrase or drop an example image on the left,
 follow the task's steps at the top right, and watch the fixed and wrist cameras live, with what the robot detected, at
