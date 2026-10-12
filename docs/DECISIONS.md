@@ -592,6 +592,7 @@ and texture cache (not checked).
 | [I-041](#i-041) | 2026-09-30 | Compose: robot's controllers never loaded (spawner timed out; then its params file was in another container's `/tmp`) | Resolved |
 | [I-042](#i-042) | 2026-10-12 | Random crashes during install (segfaults, `SystemError` in pure Python) on the workstation's i9-14900K | Open |
 | [I-043](#i-043) | 2026-10-12 | `02_pose.py`: `cannot import name 'YOLOE'` in a fresh `foundationpose` container | Resolved |
+| [I-044](#i-044) | 2026-10-12 | `install.sh venv` fails on a half-made `.venv` (python, no pip) | Resolved |
 
 ### I-001
 Python fails with errors ordinary code can't produce: `unknown opcode`, `invalid SRE code`, a bogus
@@ -841,6 +842,13 @@ extensions build and the networks load). It showed up once `install.sh stage2` (
 container. Fix: the `stage2` step, and step 4 of the README's manual setup, install `ultralytics==8.3.150` in the
 container, the same version as `.venv`; the image's torch 2.1 + cu121 stays. `02_pose.py` runs end to end again
 (mustard bottle, register 873 ms).
+
+### I-044
+**Half-made `.venv` stops `install.sh venv`.** A `.venv` with only the `python` symlinks and no pip (left by an
+earlier `python3 -m venv` that didn't finish; cause not found, since `python3 -m venv` works on this machine) passed
+the step's `[ -x .venv/bin/python ]` check, so the step skipped creating it and failed on `.venv/bin/pip: No such file
+or directory`. Fix: the step checks for `.venv/bin/pip` instead. If it's missing, `python3 -m venv .venv` runs on the
+existing directory, which adds pip and keeps any installed packages.
 
 ## Roadmap snapshot (2026-09-30, after D-035–D-038)
 

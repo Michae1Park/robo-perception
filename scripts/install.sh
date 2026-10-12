@@ -117,7 +117,7 @@ step_docker() {
 }
 
 step_venv() {
-  [ -x .venv/bin/python ] || python3 -m venv .venv
+  [ -x .venv/bin/pip ] || python3 -m venv .venv   # also repairs a half-made .venv (python, no pip), keeping its packages
   .venv/bin/pip install -q --upgrade pip
   .venv/bin/pip install torch==2.14.0 torchvision==0.29.0 --index-url https://download.pytorch.org/whl/cu130
   .venv/bin/pip install -r requirements.txt
