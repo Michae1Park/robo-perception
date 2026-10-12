@@ -164,6 +164,9 @@ step_stage2() {
     docker_cmd exec foundationpose bash -lc "$ready" >/dev/null 2>&1 \
       || { echo "FoundationPose's CUDA extensions failed to build (output above)"; exit 1; }
   fi
+  # 02_pose.py runs stage 1's YOLOE in the container too; the image's ultralytics 8.0 predates it (keeps torch 2.1)
+  docker_cmd exec foundationpose bash -lc "python -c 'from ultralytics import YOLOE'" >/dev/null 2>&1 \
+    || docker_cmd exec foundationpose bash -lc "pip install -q ultralytics==8.3.150"
   echo "NVlabs FoundationPose container ready"
 }
 

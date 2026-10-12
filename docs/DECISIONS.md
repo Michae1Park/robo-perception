@@ -578,6 +578,7 @@ Drive download, is now part of a full install; skip it with `scripts/install.sh 
 | [I-039](#i-039) | 2026-09-30 | With five targets the pantry fills: late carries collide with objects already placed | Open |
 | [I-040](#i-040) | 2026-09-30 | A text prompt's best detection is taken at any score: "the rubik's cube" picked the foam brick at 0.06 | Open |
 | [I-041](#i-041) | 2026-09-30 | Compose: robot's controllers never loaded (spawner timed out; then its params file was in another container's `/tmp`) | Resolved |
+| [I-043](#i-043) | 2026-10-12 | `02_pose.py`: `cannot import name 'YOLOE'` in a fresh `foundationpose` container | Resolved |
 
 ### I-001
 Python fails with errors ordinary code can't produce: `unknown opcode`, `invalid SRE code`, a bogus
@@ -808,6 +809,15 @@ takes `use_sim_time` as a ROS argument. With both fixes a text-prompted mustard 
 |---|---|---|
 | <a id="q-001"></a>Q-001 | Does stage 5 (multi-plane RANSAC for shelf supports) share the C++ RANSAC with stage 3? | **Answered by [D-019](#d-019):** yes, one library + pybind11 |
 | <a id="q-002"></a>Q-002 | ROS plan needs stage 5 added | **Answered by [D-020](#d-020)** |
+
+### I-043
+**No YOLOE in a fresh stage 2 container.** With no flags, `02_pose.py` runs stage 1's YOLOE inside the
+`foundationpose` container to get its mask, but the image ships ultralytics 8.0.120, which predates YOLOE. The old
+container had 8.3.150 installed by hand, and [D-051](#d-051)'s steps never recorded it (they only checked that the
+extensions build and the networks load). It showed up once `install.sh stage2` ([D-052](#d-052)) replaced the
+container. Fix: the `stage2` step, and step 4 of the README's manual setup, install `ultralytics==8.3.150` in the
+container, the same version as `.venv`; the image's torch 2.1 + cu121 stays. `02_pose.py` runs end to end again
+(mustard bottle, register 873 ms).
 
 ## Roadmap snapshot (2026-09-30, after D-035–D-038)
 
