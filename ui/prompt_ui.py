@@ -2,7 +2,7 @@
 it on the shelf.
 
   source ros2/install/setup.bash && .venv/bin/python ui/prompt_ui.py      (steps 1 + 2 of docs/ROS.md running)
-  -> http://localhost:8088 (Cursor forwards the port) or http://192.168.33.118:8088
+  -> http://<workstation-ip>:8088, or http://localhost:8088 through Cursor / ssh -L
 
 The prompt goes to detect_node ~/set_prompt, which finds the object in the live frame and names it; if it is a target,
 the task (task.launch.py) runs for it, and its Detect uses the prompt. The page shows the fixed camera, what detect_node

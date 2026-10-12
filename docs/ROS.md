@@ -112,7 +112,8 @@ shelf, the clutter voxels and the robot itself: the dynamic equivalent of adding
 
 ## Prompt UI
 
-`ui/prompt_ui.py` serves one page (port 8088; Cursor forwards it to the laptop, or `http://192.168.33.118:8088`):
+`ui/prompt_ui.py` serves one page (port 8088: `http://<workstation-ip>:8088`, or `http://localhost:8088` through Cursor / `ssh -L`;
+[README](../README.md#prompt-ui-in-the-laptops-browser)):
 type a phrase or give an example image (drop one, or pick a sample from `assets/prompts/`; drag a box around the
 object), press **Pick it up**, and watch the fixed and wrist cameras, what `detect_node` saw, the task's steps and its log.
 

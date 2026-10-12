@@ -43,6 +43,34 @@ and what it is doing: [Prompt UI](#terminal-3-option-a--web-page).
 
 ![Stages 1–5 on one scene](docs/pipeline_demo/stages.png)
 
+## Quickstart
+
+```bash
+# workstation: install (once)
+git clone https://github.com/Michae1Park/robo-perception.git ~/workspace/robo-perception
+cd ~/workspace/robo-perception
+scripts/install.sh
+
+# laptop: install (once) the Isaac Sim WebRTC Streaming Client
+#   https://docs.isaacsim.omniverse.nvidia.com/latest/installation/download.html
+
+# workstation, terminal 1
+cd ~/workspace/robo-perception
+.venv-sim/bin/python sim/ros_cell.py --livestream
+
+# workstation, terminal 2
+cd ~/workspace/robo-perception
+source ros2/install/setup.bash && ros2 launch ppp_bringup all.launch.py eval:=true
+
+# workstation, terminal 3
+cd ~/workspace/robo-perception
+source ros2/install/setup.bash && .venv/bin/python ui/prompt_ui.py
+
+# laptop: Isaac Sim WebRTC Streaming Client -> Server: <server IP> (e.g. 192.168.33.1) -> Connect
+#   needs TCP 49100 + UDP 47998 open (same LAN or VPN; an SSH tunnel will not work)
+# laptop: browser -> http://<server IP>:8088   (or localhost:8088 through Cursor / ssh -L)
+```
+
 ## Requirements
 
 | | Minimum | Tested |
@@ -158,10 +186,30 @@ python pipeline/05_place.py                           # 5 place (needs the sim c
 ### Stage 2 setup (NVlabs FoundationPose container)
 
 **Only for `02_pose.py`.** Stage 2's playground runs NVlabs' research FoundationPose in a container named
-`foundationpose`, not the Isaac ROS FoundationPose the robot uses. The `stage2` step of `scripts/install.sh` sets it
-up: NVlabs' code at a pinned commit in `third_party/FoundationPose/`, its network weights (Google Drive, 250 MB,
-checksummed), the container (a community build of NVlabs' image for CUDA 12.1 GPUs, the repo mounted at the same path)
-and FoundationPose's CUDA extensions built inside it.
+`foundationpose`, not the Isaac ROS FoundationPose the robot uses. `scripts/install.sh stage2` sets it up (part of a
+full install). By hand, once, on the workstation, from the repo root (~36 GB image):
+
+```bash
+# 1 · NVlabs' code (pinned commit) and its network weights (Google Drive, 250 MB)
+git clone https://github.com/NVlabs/FoundationPose third_party/FoundationPose
+git -C third_party/FoundationPose checkout a1b694b
+.venv/bin/pip install gdown
+.venv/bin/gdown --folder https://drive.google.com/drive/folders/1DFezOAD0oD1BblsXVxqDsl8fj0qzB82i \
+  -O third_party/FoundationPose/weights
+
+# 2 · The container: a community build of NVlabs' image for CUDA 12.1 GPUs, the repo mounted at the same path
+docker run -d --name foundationpose --label ppp.repo="$PWD" --gpus all --network host -v "$PWD:$PWD" \
+  shingarey/foundationpose_custom_cuda121:latest sleep infinity
+
+# 3 · Build FoundationPose's CUDA extensions inside it
+docker exec foundationpose bash -lc "cd $PWD/third_party/FoundationPose && bash build_all.sh"
+
+# 4 · YOLOE in the container (02_pose.py runs stage 1 there to get the mask; the image's ultralytics predates it)
+docker exec foundationpose bash -lc "pip install ultralytics==8.3.150"
+```
+
+The extensions are built for the repo's path: after moving or re-cloning the repo, remove the container
+(`docker rm -f foundationpose`) and repeat steps 2 to 4, or run `scripts/install.sh stage2`, which does that itself.
 
 `02_pose.py` (and `render_mesh.py`) then start the container themselves and run inside it, also after a reboot.
 

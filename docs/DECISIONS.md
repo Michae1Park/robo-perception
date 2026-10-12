@@ -578,6 +578,7 @@ Drive download, is now part of a full install; skip it with `scripts/install.sh 
 | [I-039](#i-039) | 2026-09-30 | With five targets the pantry fills: late carries collide with objects already placed | Open |
 | [I-040](#i-040) | 2026-09-30 | A text prompt's best detection is taken at any score: "the rubik's cube" picked the foam brick at 0.06 | Open |
 | [I-041](#i-041) | 2026-09-30 | Compose: robot's controllers never loaded (spawner timed out; then its params file was in another container's `/tmp`) | Resolved |
+| [I-042](#i-042) | 2026-10-12 | Random crashes during install (segfaults, `SystemError` in pure Python) on the workstation's i9-14900K | Open |
 | [I-043](#i-043) | 2026-10-12 | `02_pose.py`: `cannot import name 'YOLOE'` in a fresh `foundationpose` container | Resolved |
 
 ### I-001
@@ -809,6 +810,16 @@ takes `use_sim_time` as a ROS argument. With both fixes a text-prompted mustard 
 |---|---|---|
 | <a id="q-001"></a>Q-001 | Does stage 5 (multi-plane RANSAC for shelf supports) share the C++ RANSAC with stage 3? | **Answered by [D-019](#d-019):** yes, one library + pybind11 |
 | <a id="q-002"></a>Q-002 | ROS plan needs stage 5 added | **Answered by [D-020](#d-020)** |
+
+### I-042
+**Random crashes during install.** Reinstalling `.venv`, `.venv-sim` and stage 2 on the workstation crashed four
+different processes, none of them reproducibly: pip segfaulted twice, the system Python raised `SystemError: error
+return without exception set` in pure-Python code twice (empy in `ros2/build.sh`, importlib in pip), and kaolin's
+`setup.py` segfaulted inside the stage 2 container (its own Python 3.8). The same commands passed when re-run. The only
+thing they share is the hardware: an i9-14900K, the Raptor Lake generation with Intel's Vmin-shift instability, on a
+2023 BIOS (ASUS TUF Z790-PRO WIFI, 1401); the OS loads microcode 0x133. The kernel log shows no machine checks. Next:
+update the BIOS and pick Intel's default power profile, test with turbo off and run memtest86+. If the crashes stop
+with turbo off, the CPU is degraded (Intel's warranty covers it).
 
 ### I-043
 **No YOLOE in a fresh stage 2 container.** With no flags, `02_pose.py` runs stage 1's YOLOE inside the
