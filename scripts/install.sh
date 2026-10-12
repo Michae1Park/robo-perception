@@ -7,18 +7,19 @@
 #
 # Steps:
 #   driver   NVIDIA driver 580 (open kernel modules); needs a reboot, then run the script again
-#   apt      build tools, git-lfs, Python venv
+#   apt      build tools, git-lfs, Python venv, ffmpeg and Google Chrome (demo recording)
 #   ros      ROS 2 Jazzy + MoveIt 2, pick_ik, ros2_control, BehaviorTree.CPP, vision_msgs, foxglove_bridge
 #   docker   Docker Engine + NVIDIA Container Toolkit (FoundationPose runs in a container)
-#   venv     .venv: torch (CUDA 13.0), ultralytics (YOLOE), numpy, OpenCV, pybind11, uv
+#   venv     .venv: torch (CUDA 13.0), ultralytics (YOLOE), numpy, OpenCV, pybind11, uv, gdown, playwright
 #   sim      .venv-sim: Isaac Sim 6.1 (pip, ~26 GB). Installing it accepts the NVIDIA Omniverse EULA
 #   assets   YCB meshes (assets/ycb/) and YOLOE weights (models/)
 #   fp       FoundationPose image ppp-isaac-ros:4.5 (~100 GB with its base, ~30 min), ONNX models, TensorRT engines
+#   stage2   stage 2's playground: NVlabs FoundationPose (pinned) + weights, container `foundationpose` (~36 GB image)
 #   build    ROS workspace (ros2/build.sh) + camera extrinsics
 set -eo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
-ALL=(driver apt ros docker venv sim assets fp build)
+ALL=(driver apt ros docker venv sim assets fp stage2 build)
 STEPS=("${@:-${ALL[@]}}")
 SUDO=$([ "$(id -u)" = 0 ] && echo "" || echo sudo)
 APT="$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends"
@@ -26,6 +27,16 @@ ROS_PKGS=(ros-jazzy-ros-base ros-jazzy-moveit ros-jazzy-moveit-resources-panda-m
           ros-jazzy-moveit-resources-panda-description ros-jazzy-pick-ik ros-jazzy-ros2-control
           ros-jazzy-ros2-controllers ros-jazzy-behaviortree-cpp ros-jazzy-vision-msgs ros-jazzy-foxglove-bridge
           ros-jazzy-tf2-eigen ros-jazzy-sensor-msgs-py python3-colcon-common-extensions)
+APT_PKGS=(build-essential cmake git git-lfs curl ca-certificates gnupg python3-venv python3-dev ffmpeg)
+NV_DIR=third_party/FoundationPose
+NV_COMMIT=a1b694b
+NV_IMAGE=shingarey/foundationpose_custom_cuda121:latest   # NVlabs' image rebuilt for CUDA 12.1 GPUs (D-051)
+NV_WEIGHTS_URL=https://drive.google.com/drive/folders/1DFezOAD0oD1BblsXVxqDsl8fj0qzB82i
+NV_WEIGHTS_SHA256=(   # refiner + scorer, as NVlabs' Drive serves them
+  "774700586ddc435d408fc01c9809c43e151232936369dfbea0f0f964ba471d60  2023-10-28-18-33-37/model_best.pth"
+  "28a6ba94a33230ee5fc3c51939486281578b0972542bd9e38ca6123e75605686  2023-10-28-18-33-37/config.yml"
+  "81924d384bf5c26c646ee4783104982ae3d1e049c181c36641b6a7aeae494c26  2024-01-11-20-02-45/model_best.pth"
+  "a79db4de3b95885dd5ae86833b37b8698a75dad81e87d1086cd50b2fcd8dda3f  2024-01-11-20-02-45/config.yml")
 
 say() { printf '\n\033[1m[install] %s\033[0m\n' "$*"; }
 have_pkgs() { dpkg-query -W -f='${Status}\n' "$@" 2>/dev/null | grep -c "ok installed" | grep -qx "$#"; }
@@ -50,8 +61,11 @@ step_driver() {
 }
 
 step_apt() {
-  have_pkgs build-essential cmake git git-lfs curl ca-certificates gnupg python3-venv python3-dev && return
-  $SUDO apt-get update && $APT build-essential cmake git git-lfs curl ca-certificates gnupg python3-venv python3-dev
+  have_pkgs "${APT_PKGS[@]}" || { $SUDO apt-get update && $APT "${APT_PKGS[@]}"; }
+  if ! have_pkgs google-chrome-stable; then   # record_demo.py drives the system Chrome; the .deb adds Google's apt repo
+    curl -fsSL -o /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+    $APT /tmp/google-chrome.deb
+  fi
 }
 
 step_ros() {
@@ -119,6 +133,34 @@ step_fp() {
   docker_cmd image inspect ppp-isaac-ros:4.5 >/dev/null 2>&1 \
     || docker_cmd build -f docker/Dockerfile --target isaac_ros -t ppp-isaac-ros:4.5 .
   if docker info >/dev/null 2>&1; then docker/foundationpose.sh --prepare; else $SUDO -E docker/foundationpose.sh --prepare; fi
+}
+
+step_stage2() {
+  [ -d "$NV_DIR/.git" ] || git clone https://github.com/NVlabs/FoundationPose "$NV_DIR"
+  git -C "$NV_DIR" checkout -q "$NV_COMMIT"
+  local sums; sums=$(printf '%s\n' "${NV_WEIGHTS_SHA256[@]}")
+  if ! (cd "$NV_DIR/weights" 2>/dev/null && sha256sum -c --quiet <<<"$sums" 2>/dev/null); then
+    for i in 1 2 3; do   # Drive folder listings fail now and then (quota, rate limits)
+      .venv/bin/gdown --folder "$NV_WEIGHTS_URL" -O "$NV_DIR/weights" && break
+      sleep 30
+    done
+    (cd "$NV_DIR/weights" && sha256sum -c --quiet <<<"$sums") \
+      || { echo "NVlabs weights failed to download: get them from $NV_WEIGHTS_URL into $NV_DIR/weights/"; exit 1; }
+  fi
+  # The CUDA extensions are built for the repo path, so a container made for another path is replaced.
+  if [ "$(docker_cmd inspect -f '{{index .Config.Labels "ppp.repo"}}' foundationpose 2>/dev/null)" != "$REPO" ]; then
+    docker_cmd rm -f foundationpose >/dev/null 2>&1 || true
+    docker_cmd run -d --name foundationpose --label ppp.repo="$REPO" --gpus all --network host -v "$REPO:$REPO" \
+      "$NV_IMAGE" sleep infinity
+    docker_cmd exec foundationpose rm -rf "$REPO/$NV_DIR/mycpp/build"
+  fi
+  docker_cmd start foundationpose >/dev/null
+  if docker_cmd exec foundationpose bash -lc "ls $REPO/$NV_DIR/mycpp/build/mycpp*.so && python -c 'import kaolin'" \
+      >/dev/null 2>&1; then
+    echo "NVlabs FoundationPose container ready"; return
+  fi
+  docker_cmd exec foundationpose bash -lc "cd $REPO/$NV_DIR && bash build_all.sh"
+  docker_cmd exec foundationpose chown -R "$(id -u):$(id -g)" "$REPO/$NV_DIR"
 }
 
 step_build() {

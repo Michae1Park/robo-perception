@@ -73,13 +73,14 @@ own: `scripts/install.sh <step> [<step> ...]`.
 | Step | Installs | First time |
 |---|---|---|
 | `driver` | NVIDIA driver 580 if missing or older. **Then reboot and run the script again** | 5 min |
-| `apt` | Build tools, git-lfs, Python venv | 1 min |
+| `apt` | Build tools, git-lfs, Python venv, ffmpeg, Google Chrome (demo recording) | 2 min |
 | `ros` | ROS 2 Jazzy, MoveIt 2, pick_ik, ros2_control, BehaviorTree.CPP, vision_msgs, foxglove_bridge | 5 min |
 | `docker` | Docker Engine + NVIDIA Container Toolkit; adds you to the `docker` group (**log out and in** afterwards) | 3 min |
-| `venv` | `.venv`: PyTorch (CUDA 13.0), ultralytics (YOLOE), OpenCV, pybind11 | 5 min |
+| `venv` | `.venv`: PyTorch (CUDA 13.0), ultralytics (YOLOE), OpenCV, pybind11, gdown, playwright | 5 min |
 | `sim` | `.venv-sim`: Isaac Sim 6.1 | 15 min |
 | `assets` | YCB meshes (`assets/ycb/`), YOLOE weights (`models/`) | 2 min |
 | `fp` | FoundationPose image `ppp-isaac-ros:4.5`, its ONNX models and TensorRT engines for your GPU | 30 min |
+| `stage2` | Stage 2's playground: NVlabs FoundationPose (pinned) and its weights, container `foundationpose` (~36 GB image) | 15 min |
 | `build` | ROS workspace (`ros2/build.sh`), camera extrinsics | 3 min |
 
 Installing accepts the [NVIDIA Omniverse EULA](https://docs.omniverse.nvidia.com/platform/latest/common/NVIDIA_Omniverse_License_Agreement.html)
@@ -128,7 +129,7 @@ docker compose -f docker/compose.yaml run --rm task  # terminal 2, once terminal
 | **Changing code** | Every change needs an image rebuild (step 2), which is slow. Develop natively; use Docker to deploy |
 
 **Data and model weights.** Meshes and weights are not in git; both install paths download them, so nothing is
-fetched by hand (except for stage 2's playground: [its own setup](#stage-2-setup-nvlabs-foundationpose-container)).
+fetched by hand.
 Docker needs network access during `build`.
 
 | What | Where | Source | Native | Docker |
@@ -157,24 +158,10 @@ python pipeline/05_place.py                           # 5 place (needs the sim c
 ### Stage 2 setup (NVlabs FoundationPose container)
 
 **Only for `02_pose.py`.** Stage 2's playground runs NVlabs' research FoundationPose in a container named
-`foundationpose`. `scripts/install.sh` does not set it up: the robot uses Isaac ROS FoundationPose instead, and the
-other playgrounds don't need it. Once, on the workstation, from the repo root (~36 GB image):
-
-```bash
-# 1 · NVlabs' code (pinned commit) and its network weights (Google Drive, 250 MB)
-git clone https://github.com/NVlabs/FoundationPose third_party/FoundationPose
-git -C third_party/FoundationPose checkout a1b694b
-.venv/bin/pip install gdown
-.venv/bin/gdown --folder https://drive.google.com/drive/folders/1DFezOAD0oD1BblsXVxqDsl8fj0qzB82i \
-  -O third_party/FoundationPose/weights
-
-# 2 · The container: a community build of NVlabs' image for CUDA 12.1 GPUs, the repo mounted at the same path
-docker run -d --name foundationpose --gpus all --network host -v "$PWD:$PWD" \
-  shingarey/foundationpose_custom_cuda121:latest sleep infinity
-
-# 3 · Build FoundationPose's CUDA extensions inside it
-docker exec foundationpose bash -lc "cd $PWD/third_party/FoundationPose && bash build_all.sh"
-```
+`foundationpose`, not the Isaac ROS FoundationPose the robot uses. The `stage2` step of `scripts/install.sh` sets it
+up: NVlabs' code at a pinned commit in `third_party/FoundationPose/`, its network weights (Google Drive, 250 MB,
+checksummed), the container (a community build of NVlabs' image for CUDA 12.1 GPUs, the repo mounted at the same path)
+and FoundationPose's CUDA extensions built inside it.
 
 `02_pose.py` (and `render_mesh.py`) then start the container themselves and run inside it, also after a reboot.
 

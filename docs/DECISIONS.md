@@ -63,7 +63,8 @@ along the way. Newest entries go at the bottom of each list.
 | [D-048](#d-048) | 2026-10-01 | Demo re-recorded sharp: UI screencast frames at a 1280 px layout, sim at 1080p; prompt UI as SVG | Accepted |
 | [D-049](#d-049) | 2026-10-01 | README documents where meshes and weights come from; mustard0 demo data stays a manual download | Superseded by D-050 (mustard0); data and weights docs still Accepted |
 | [D-050](#d-050) | 2026-10-01 | Scripted mustard0 run removed; the playgrounds take its numbered names (`01_detect.py` … `05_place.py`) | Accepted |
-| [D-051](#d-051) | 2026-10-01 | Stage 2's NVlabs FoundationPose container: setup commands in the README, outside `install.sh` | Accepted |
+| [D-051](#d-051) | 2026-10-01 | Stage 2's NVlabs FoundationPose container: setup commands in the README, outside `install.sh` | Superseded by [D-052](#d-052) |
+| [D-052](#d-052) | 2026-10-12 | `install.sh` sets up everything, stage 2's NVlabs container included (`stage2` step) | Accepted |
 
 ### D-001
 **Keep YOLOE-seg (not OWLv2 + SAM2).** One `ultralytics` model gives box + mask in a single pass and was
@@ -519,6 +520,18 @@ targets older GPUs; this is what runs on the L40S) with the repo mounted at its 
 Verified from scratch in a throwaway container: extensions build and both networks load. Kept out of `install.sh` because
 only one playground needs it, and it adds a 36 GB image plus a Drive download to an install the robot doesn't need. Both
 scripts now re-run themselves in the container by absolute path, so they work from any directory.
+
+### D-052
+**`install.sh` installs everything; supersedes [D-051](#d-051).** A fresh machine should need nothing but
+`scripts/install.sh`. Three things were still by hand: stage 2's NVlabs container ([D-051](#d-051)), `playwright` for
+`record_demo.py`, and the system ffmpeg and Chrome that `demo_gif.py` and `record_demo.py` call. The new `stage2` step
+clones NVlabs at `a1b694b`, fetches the weights with `gdown --folder` (three tries, since Drive listings fail now and
+then; [D-049](#d-049)) and checks them against the sha256 of the working copy, runs the container from
+`shingarey/foundationpose_custom_cuda121`, and builds the CUDA extensions in it. The container carries a `ppp.repo`
+label with the repo path: the extensions are built for that path, so a container made for another checkout (the old
+`prompt-pick-place` one) is replaced and rebuilt. `gdown` and `playwright` join `requirements.txt`; the `apt` step adds
+ffmpeg and Google Chrome (Google's .deb, which also adds its apt repo). The cost D-051 avoided, a 36 GB image and a
+Drive download, is now part of a full install; skip it with `scripts/install.sh <other steps>`.
 
 ## Issues
 

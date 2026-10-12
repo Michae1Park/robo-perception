@@ -12,3 +12,5 @@ jupyterlab
 ipywidgets
 pybind11>=2.13        # builds ros2/ ppp_geometry_py against numpy 2 (ros2/build.sh)
 uv                    # installs Isaac Sim into .venv-sim (scripts/install.sh)
+gdown                 # NVlabs' FoundationPose weights from Google Drive (scripts/install.sh stage2)
+playwright            # drives the prompt UI in Chrome (scripts/record_demo.py)

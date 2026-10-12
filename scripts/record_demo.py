@@ -4,7 +4,7 @@ the page, while the sim records its own view. scripts/demo_gif.py then stacks th
   1  .venv-sim/bin/python sim/ros_cell.py --record output/rec/sim --record-size 1920 1080
   2  source ros2/install/setup.bash && ros2 launch ppp_bringup all.launch.py eval:=true
   3  source ros2/install/setup.bash && .venv/bin/python ui/prompt_ui.py
-  4  .venv/bin/python scripts/record_demo.py              (needs: .venv/bin/pip install playwright; uses the system Chrome)
+  4  .venv/bin/python scripts/record_demo.py              (uses the system Chrome; both from scripts/install.sh)
   5  .venv/bin/python scripts/demo_gif.py --motion-speed 8 --split
 
 The page is captured with Chrome's screencast at --scale device pixels (Playwright's own video is a low-bitrate VP8)
