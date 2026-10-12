@@ -65,6 +65,7 @@ along the way. Newest entries go at the bottom of each list.
 | [D-050](#d-050) | 2026-10-01 | Scripted mustard0 run removed; the playgrounds take its numbered names (`01_detect.py` … `05_place.py`) | Accepted |
 | [D-051](#d-051) | 2026-10-01 | Stage 2's NVlabs FoundationPose container: setup commands in the README, outside `install.sh` | Superseded by [D-052](#d-052) |
 | [D-052](#d-052) | 2026-10-12 | `install.sh` sets up everything, stage 2's NVlabs container included (`stage2` step) | Accepted |
+| [D-053](#d-053) | 2026-10-12 | `install.sh --compilescene` compiles the sim's shaders at install time (opt-in) | Accepted |
 
 ### D-001
 **Keep YOLOE-seg (not OWLv2 + SAM2).** One `ultralytics` model gives box + mask in a single pass and was
@@ -532,6 +533,17 @@ label with the repo path: the extensions are built for that path, so a container
 `prompt-pick-place` one) is replaced and rebuilt. `gdown` and `playwright` join `requirements.txt`; the `apt` step adds
 ffmpeg and Google Chrome (Google's .deb, which also adds its apt repo). The cost D-051 avoided, a 36 GB image and a
 Drive download, is now part of a full install; skip it with `scripts/install.sh <other steps>`.
+
+### D-053
+**Shader compile at install time, opt-in (`--compilescene`).** The first `ros_cell.py` start spends ~3 min compiling
+Isaac Sim's RTX/MDL shaders. They are cached in `.venv-sim/.../isaacsim/kit/cache/` (`DerivedDataCache`,
+`nv_shadercache`, `shadercache`; ~650 MB), per GPU and driver. `install.sh --compilescene` adds a `scene` step, run
+last, that renders the cell once with `sim/scene.py --out <tmp dir>`: the same cell (`sim/cell.py`) and cameras, no
+ROS needed. Without the flag nothing changes and the compile happens at runtime. `install.sh scene` also runs it on
+its own. Opt-in because it needs the GPU (not possible in `docker build`) and adds ~3 min to an install. Checked
+with the cache moved aside: the step took 198 s, then `ros_cell.py` was up in 13 s and the cache did not grow.
+Note: Docker's `isaac-cache` volume is on `/root/.cache`, not on this directory, so it likely keeps only the asset
+and texture cache (not checked).
 
 ## Issues
 

@@ -49,7 +49,7 @@ and what it is doing: [Prompt UI](#terminal-3-option-a--web-page).
 # workstation: install (once)
 git clone https://github.com/Michae1Park/robo-perception.git ~/workspace/robo-perception
 cd ~/workspace/robo-perception
-scripts/install.sh
+scripts/install.sh --compilescene   # --compilescene: compile the sim's shaders now, not on terminal 1's first start
 
 # laptop: install (once) the Isaac Sim WebRTC Streaming Client
 #   https://docs.isaacsim.omniverse.nvidia.com/latest/installation/download.html
@@ -92,7 +92,8 @@ The whole task uses 12 GB of VRAM and 18 GB of RAM.
 ```bash
 git clone https://github.com/Michae1Park/robo-perception.git
 cd robo-perception
-scripts/install.sh
+scripts/install.sh                  # the sim's shaders compile on its first start (~3 min, once)
+scripts/install.sh --compilescene   # or: compile them now, as the last install step
 ```
 
 It asks for your sudo password, skips anything already installed and can be re-run at any point. Each step on its
@@ -110,6 +111,7 @@ own: `scripts/install.sh <step> [<step> ...]`.
 | `fp` | FoundationPose image `ppp-isaac-ros:4.5`, its ONNX models and TensorRT engines for your GPU | 30 min |
 | `stage2` | Stage 2's playground: NVlabs FoundationPose (pinned) and its weights, container `foundationpose` (~36 GB image) | 15 min |
 | `build` | ROS workspace (`ros2/build.sh`), camera extrinsics | 3 min |
+| `scene` | Only with `--compilescene`: compiles Isaac Sim's shaders for the sim cell, which otherwise happens on the first `ros_cell.py` start | 3 min |
 
 Installing accepts the [NVIDIA Omniverse EULA](https://docs.omniverse.nvidia.com/platform/latest/common/NVIDIA_Omniverse_License_Agreement.html)
 (Isaac Sim) and NVIDIA's model license (FoundationPose weights, from NGC).

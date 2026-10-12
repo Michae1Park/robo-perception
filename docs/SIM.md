@@ -38,7 +38,7 @@ Both camera bodies and the tripod are visual only (no colliders), and never appe
 Isaac Sim 6.1 gets its own venv, `.venv-sim` (Python 3.12, ~26 GB): `scripts/install.sh sim`
 ([README](../README.md#install)).
 
-The first run compiles shaders (~3 min, once). After that a `scene.py` run takes ~15 s. Robot and camera assets come from NVIDIA's asset server.
+The first run compiles shaders (~3 min, once), unless `scripts/install.sh --compilescene` already did. After that a `scene.py` run takes ~15 s. Robot and camera assets come from NVIDIA's asset server.
 
 ## Datasets (`scene.py`)
 

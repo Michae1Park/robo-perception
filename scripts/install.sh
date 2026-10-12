@@ -4,6 +4,7 @@
 #
 #   scripts/install.sh                 # every step below, in order
 #   scripts/install.sh venv build      # only these steps
+#   scripts/install.sh --compilescene  # + compile the sim scene's shaders now (else on ros_cell.py's first start)
 #
 # Steps:
 #   driver   NVIDIA driver 580 (open kernel modules); needs a reboot, then run the script again
@@ -16,11 +17,22 @@
 #   fp       FoundationPose image ppp-isaac-ros:4.5 (~100 GB with its base, ~30 min), ONNX models, TensorRT engines
 #   stage2   stage 2's playground: NVlabs FoundationPose (pinned) + weights, container `foundationpose` (~36 GB image)
 #   build    ROS workspace (ros2/build.sh) + camera extrinsics
+#   scene    only with --compilescene (or named): one headless render of the sim cell, ~3 min the first time
 set -eo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 ALL=(driver apt ros docker venv sim assets fp stage2 build)
-STEPS=("${@:-${ALL[@]}}")
+STEPS=()
+COMPILE_SCENE=
+for a in "$@"; do
+  case "$a" in
+    --compilescene) COMPILE_SCENE=1 ;;
+    -*) echo "unknown option '$a' (options: --compilescene)"; exit 1 ;;
+    *) STEPS+=("$a") ;;
+  esac
+done
+[ ${#STEPS[@]} -gt 0 ] || STEPS=("${ALL[@]}")
+[ -z "$COMPILE_SCENE" ] || STEPS+=(scene)   # last: it needs the sim and assets steps' output
 SUDO=$([ "$(id -u)" = 0 ] && echo "" || echo sudo)
 APT="$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends"
 ROS_PKGS=(ros-jazzy-ros-base ros-jazzy-moveit ros-jazzy-moveit-resources-panda-moveit-config
@@ -170,6 +182,12 @@ step_stage2() {
   echo "NVlabs FoundationPose container ready"
 }
 
+step_scene() {   # Isaac Sim keeps compiled shaders in .venv-sim's kit/cache, per GPU + driver (D-053)
+  local out; out=$(mktemp -d)
+  .venv-sim/bin/python sim/scene.py --out "$out"
+  rm -rf "$out"
+}
+
 step_build() {
   ros2/build.sh
   .venv/bin/python sim/write_calibration.py
@@ -177,7 +195,7 @@ step_build() {
 
 check
 for s in "${STEPS[@]}"; do
-  declare -F "step_$s" >/dev/null || { echo "unknown step '$s' (steps: ${ALL[*]})"; exit 1; }
+  declare -F "step_$s" >/dev/null || { echo "unknown step '$s' (steps: ${ALL[*]} scene)"; exit 1; }
   say "$s"
   "step_$s"
 done
