@@ -115,7 +115,9 @@ step_venv() {
 }
 
 step_sim() {
-  [ -x .venv-sim/bin/python ] && .venv-sim/bin/python -c "import isaacsim" 2>/dev/null && { echo "Isaac Sim present"; return; }
+  # Read the installed version: importing isaacsim starts Kit, which waits for an EULA answer on stdin.
+  local v; v=$([ -x .venv-sim/bin/python ] && .venv-sim/bin/python -c "import importlib.metadata as m; print(m.version('isaacsim'))" 2>/dev/null) || true
+  [ "$v" = 6.1.0.0 ] && { echo "Isaac Sim $v present"; return; }
   .venv/bin/uv venv --allow-existing .venv-sim --python /usr/bin/python3.12
   .venv/bin/uv pip install --python .venv-sim/bin/python "isaacsim[all,extscache]==6.1.0.0" \
     --extra-index-url https://pypi.nvidia.com --index-strategy unsafe-best-match
