@@ -155,12 +155,14 @@ step_stage2() {
     docker_cmd exec foundationpose rm -rf "$REPO/$NV_DIR/mycpp/build"
   fi
   docker_cmd start foundationpose >/dev/null
-  if docker_cmd exec foundationpose bash -lc "ls $REPO/$NV_DIR/mycpp/build/mycpp*.so && python -c 'import kaolin'" \
-      >/dev/null 2>&1; then
-    echo "NVlabs FoundationPose container ready"; return
+  local ready="ls $REPO/$NV_DIR/mycpp/build/mycpp*.so && python -c 'import kaolin._C'"
+  if ! docker_cmd exec foundationpose bash -lc "$ready" >/dev/null 2>&1; then
+    docker_cmd exec foundationpose bash -lc "cd $REPO/$NV_DIR && bash build_all.sh" || true   # it doesn't stop on errors
+    docker_cmd exec foundationpose chown -R "$(id -u):$(id -g)" "$REPO/$NV_DIR"
+    docker_cmd exec foundationpose bash -lc "$ready" >/dev/null 2>&1 \
+      || { echo "FoundationPose's CUDA extensions failed to build (output above)"; exit 1; }
   fi
-  docker_cmd exec foundationpose bash -lc "cd $REPO/$NV_DIR && bash build_all.sh"
-  docker_cmd exec foundationpose chown -R "$(id -u):$(id -g)" "$REPO/$NV_DIR"
+  echo "NVlabs FoundationPose container ready"
 }
 
 step_build() {
